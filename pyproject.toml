@@ -1,0 +1,25 @@
+[project]
+name = "openutau-mcp"
+version = "0.1.0"
+description = "MCP server that lets Claude operate OpenUtau (English / Japanese)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.9,<2",
+    "PyYAML>=6",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+kanji = ["pykakasi>=2.2"]
+
+[project.scripts]
+openutau-mcp = "openutau_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openutau_mcp"]

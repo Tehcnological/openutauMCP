@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>OpenUtauMcp.Plugin</AssemblyName>
+    <RootNamespace>OpenUtauMcp.Plugin</RootNamespace>
+    <Version>0.1.0</Version>
+    <!-- Folder of the installed OpenUtau. Override with: dotnet build -p:OpenUtauDir="D:\Apps\OpenUtau" -->
+    <OpenUtauDir Condition="'$(OpenUtauDir)' == ''">C:\Program Files\OpenUtau</OpenUtauDir>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Build against the installed app so the types match the running OpenUtau. Never copied to output. -->
+    <Reference Include="OpenUtau.Core">
+      <HintPath>$(OpenUtauDir)\OpenUtau.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Serilog">
+      <HintPath>$(OpenUtauDir)\Serilog.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
