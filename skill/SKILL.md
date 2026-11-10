@@ -1,69 +1,137 @@
 ---
 name: openutau
-description: Compose and edit singing in OpenUtau (English and Japanese lyrics) through the openutau MCP server - write melodies, set lyrics, choose singers and phonemizers, check pronunciation, export WAV. / OpenUtau MCP サーバーで歌声（日本語・英語の歌詞）を作成・編集し、WAV に書き出します。
+description: Make the best-sounding sung vocals in OpenUtau (English and Japanese lyrics) through the openutau MCP server - lyrics, melody, singer and phonemizer choice, timing, pitch, expression, checks and report. Use for any OpenUtau / UTAU / vocal synthesis task. / OpenUtau MCP で最高品質の歌声を作るための手順とルール。
 ---
 
-# OpenUtau workflows / OpenUtau ワークフロー
+# OpenUtau vocals / OpenUtau 歌声制作
 
-## Ground rules / 基本
+Follow these rules every time. Defaults are starting points; the user's ear wins.
+If a `voicebanks.md` file sits next to this one, read it first: it lists the user's singers, phonemizers,
+voice colors and credit requirements.
 
-- 480 ticks = quarter note, 1920 = one 4/4 bar. Note positions are relative to their part.
-  / 四分音符 = 480 ティック、4/4 の1小節 = 1920。音符の位置はパート相対。
-- Pitch: MIDI number or name, C4 = 60. / 音高は MIDI 番号か音名（C4 = 60）。
-- "part" counts voice parts only; "note" is the index inside the part, sorted by position.
-  / part はボイスパートだけの番号、note はパート内の位置順の番号。
-- Every live edit is one undo step; save explicitly with `save_project`.
-  / ライブ編集は1回 = 取り消し1回。保存は `save_project` で明示的に。
-- Never pass `force=true` to `open_project` / `new_project` / `close_openutau` unless the user agreed to lose
-  unsaved work. / ユーザーの了承なしに `force=true` を使わないこと。
+Basics: 480 ticks = quarter note (1920 = 4/4 bar, 240 = 8th, 120 = 16th, 60 = 32nd). Note positions are relative
+to their part. Pitch: MIDI number or name, C4 = 60. "part" counts voice parts only. Every live edit is one undo step.
+Never pass `force=true` unless the user agreed to lose unsaved work.
 
-## 1. Start / 開始
+## 1. Workflow (always in this order) / 手順
 
-1. `openutau_status`. If `bridge` is false, follow `hint`: launch with `launch_openutau`, or install the plugin and
-   restart OpenUtau. / `bridge` が false なら `hint` に従う（`launch_openutau`、またはプラグインを入れて再起動）。
-2. `list_singers` → pick a singer id. `list_phonemizers` if unsure. / 歌手 ID を選ぶ。
+1. **Start.** `openutau_status`; launch if needed. Before any edit, `get_project` and confirm `file_path` is the
+   project you expect (a live project has reset to blank before: reopen the saved file with `open_project`).
+2. **Source.** Never guess or "remember" a melody. Use a melody the user gave, the user's own song, or a
+   public-domain source you can cite (traditional tune from a public-domain score, e.g. IMSLP or Mutopia).
+   No source: ask. Write the source in the report.
+3. **Lyrics first, approval before building.** Show a table per phrase: source lyric | target lyric | syllables per
+   note (one cell per note, `+` for held syllables) | note count. Counts must match the melody's notes per phrase.
+   Wait for the user's OK. Do not build before it.
+4. **Singer + phonemizer.** Pick from `voicebanks.md` (or `list_singers`), then confirm with
+   `rank_phonemizers(singer, text=<the approved lyrics>)`. Use `best`; never use a phonemizer scoring under ~0.95.
+   A tag that is not installed (e.g. "EN CVVC") does not exist: do not ask for it, pick from the ranking.
+   A wrong singer/phonemizer pair renders as silence, hums or garbled sounds.
+5. **Build in stages, save after each:**
+   a. Notes: `new_project` (only if the user agrees) → `set_tempo` → `set_time_signature` → track setup →
+      `add_part` → `add_melody(part, "A4:1 A4:1 B4:2 r:1 ...")` → `fit_part`. Save.
+   b. Lyrics: `set_lyrics` per phrase, then `list_phonemes`: every phoneme must have `has_oto: true`. Save.
+   c. Pitch and expression (sections 5–6). Save.
+   Save to `Documents\OpenUtau\Projects\<song>.ustx` unless the user gives a path; never overwrite an earlier
+   version — use `-v2`, `-v3`.
+6. **Self-check** (section 9), then **report** (section 10).
 
-## 2. New song, live / 新曲（ライブ）
+Do not render/export audio unless asked. Do not play audio without being asked.
 
-1. `new_project` → `set_tempo(bpm)` → `set_time_signature` if not 4/4.
-2. `update_track(track=0, singer=..., phonemizer=...)` (or `add_track`). Choose the phonemizer for the bank:
-   Japanese UTAU → `JapanesePresampPhonemizer`; English X-SAMPA → `EnXSampaPhonemizer`;
-   ARPAsing → `ArpasingPhonemizer`; VCCV → `EnglishVCCVPhonemizer`; English words on a Japanese bank → `ENtoJAPhonemizer`.
-   / 音源に合う音素化器を選ぶ（上記）。
-3. `add_part(track=0, position=0, duration=7680)`.
-4. Melody + lyrics in one call: `assign_lyrics(part, text, start_tick, durations, tones)`.
-   Durations/tones can be lists; the last value repeats. Preview with `split_lyrics` first if the note count matters.
-   / `assign_lyrics` でメロディと歌詞を一度に。音符数が重要なら先に `split_lyrics` で確認。
-5. `list_phonemes(part)` — any `has_oto: false` means that sound is missing from the voicebank: change the lyric,
-   phonemizer or singer. / `has_oto: false` があれば歌詞・音素化器・歌手を見直す。
-6. `play(tick=0)` / `stop`, then `save_project(path)` and `export_wav(path)`.
+## 2. Singers and phonemizers / 歌手と音素化器
 
-Melody and lyrics together: `add_melody(part, melody="A4:1 A4:1 B4:2 r:1", lyrics="さくら")` (beats are quarter notes,
-r = rest; one lyric per sounding note). Then `fit_part(part)` to trim the part to the last bar.
-Choosing a phonemizer: `rank_phonemizers(singer)` tries every installed one on sample lyrics and ranks them by how many
-sounds the voicebank has; use `best`. Only installed phonemizers exist (there is no "EN CVVC" in stock OpenUtau).
-/ メロディと歌詞は add_melody で一度に入力し、fit_part でパートの長さを合わせます。
+- Use the table in `voicebanks.md` when present; trust `rank_phonemizers` over any table if they disagree, and say so.
+- Classic UTAU banks: phonemizer must match the bank's sample style (CV/VCV/CVVC Japanese, ARPAsing, VCCV,
+  X-SAMPA, C+V English). DiffSinger banks: use a `DIFFS <lang>` phonemizer and the DiffSinger renderer;
+  classic phonemizers do not work on them.
+- Voice colors (subbanks): `get_project` → track `voice_colors`; set with
+  `set_note_expression(part, "clr", <index in voice_colors>, indices)`. Do not type color suffixes into lyrics.
+- English lyrics on a Japanese-only bank: `ENtoJAPhonemizer` ("EN to JA"), and expect an accent.
 
-## 3. Edit an existing song / 既存曲の編集
+## 3. English lyric rules / 英語の歌詞
 
-1. `open_project(path)` → `get_project` → `list_notes(part)`.
-2. Change notes in place with `edit_notes` (keeps pitch curves). Replace words with `set_lyrics(part, text, start_index)`.
-   Delete with `delete_notes`. / `edit_notes` はピッチ曲線を保ったまま編集。歌詞の差し替えは `set_lyrics`。
-3. Expressions: `list_expressions`, then `set_note_expression(part, "vel", 130, indices)`. `value: null` resets.
-4. Made a mistake? `undo`. / 間違えたら `undo`。
+- Whole word on its first note; `+` on each extra note of that word (`beau-ti-ful` → `beautiful + +`).
+- One vowel sound per note. Never put two syllables on one note.
+- Word endings: most English UTAU banks sing a word's final consonants as a transition into the NEXT note.
+  So after a consonant-ending word ("mist", "cloud", "and") put a rest or a note of at least an 8th; avoid
+  final clusters (-st, -nd, -ts, -ks) before short notes.
+- Vowel-initial words ("all", "it", "is", "as", "eyes") blur into the previous word. Prefer consonant-initial
+  words, especially on short notes; if you must, put a short rest before them.
+- High or long notes: open vowels (ah, oh, ay, "aw"). Avoid "ee" and "ih" above about C5 and on long holds.
+- Short notes (8th or less): one-syllable, simple words ("the", "to", "go"), not "eyes can" or "us and".
+- A word that sounds mushy: hyphenate it by hand, or swap a synonym with the same meaning and stress.
+- Check `list_phonemes`: a word whose phonemes look wrong or are missing its ending needs rewording.
 
-## 4. Lyrics / 歌詞
+## 4. Japanese lyric rules / 日本語の歌詞
 
-- Japanese: one mora per note (きゃ = 1 note; っ is a separate note; ー becomes a "+" note holding the previous vowel). Kanji → hiragana if pykakasi is installed;
-  otherwise write kana. Romaji works when separated by spaces.
-  / 日本語は1音符1モーラ。漢字は pykakasi があればひらがなに。ローマ字はスペース区切り。
-- English: one word per note. For a word over several notes write hyphens: `beau-ti-ful` → `beautiful + +`.
-  / 英語は1音符1単語。複数音符にまたがる単語はハイフンで区切る。
+- One mora per note: `きゃ` = 1 note, `っ` = its own note, `ー` = a `+` note holding the previous vowel.
+- Prefer kana; kanji are converted with pykakasi but readings can be wrong — check the split first.
+- Particles は/へ/を: write as sung (わ/え/お) when the phonemizer reads them literally; confirm with `list_phonemes`.
+- Do not put `っ` on a long note; give it a short note or merge into the previous note's end.
 
-## 5. Without OpenUtau running / OpenUtau なしで
+## 5. Timing / タイミング
 
-`ustx_create(path, bpm, singer)` → `ustx_add_voice_part` → `ustx_assign_lyrics` (or `ustx_add_notes`) →
-`ustx_set_vibrato` → open later with `launch_openutau(project_path=path)`.
-Classic UTAU: `ust_import` (.ust → .ustx), `ust_export` (.ustx part → Shift_JIS .ust).
-Voicebank checks: `list_voicebanks`, `search_oto(voicebank, "か")`.
-/ OpenUtau を起動せずに .ustx を作成・編集し、後で `launch_openutau` で開けます。UTAU の .ust も変換できます。
+- Put note starts exactly on the beat. OpenUtau already starts each consonant early using the bank's
+  preutterance, so the vowel lands on the beat. Do not shift notes earlier by hand.
+- Leave a gap between phrases: at least an 8th (240) at slow/medium tempos, 16th (120) minimum when fast.
+  Never run phrases back-to-back. The gap is also where breaths go.
+- Minimum note length: 16th (120) below ~100 BPM, 32nd (60) at any tempo. Merge or re-rhythm anything shorter.
+- No overlapping notes and no zero/negative lengths.
+
+## 6. Pitch and expression defaults / ピッチと表情
+
+- Portamento: keep OpenUtau's default short slide between notes. Bigger slides only for emotional moments
+  (tools cannot draw pitch curves; ask the user to draw them in OpenUtau and say where).
+- Vibrato (`edit_notes` → `vibrato`): only on notes ≥ 1 beat (480). Defaults: `length` 40–60 (starts partway in),
+  `depth` 15–25 cents, `period` 170–200 ms, `in` 20, `out` 20. Never on short notes.
+- Phrase volume (`set_note_expression "vol"`, default 100): rise and fall across the phrase, e.g. first note 90,
+  peak 105–110, last note 85. Soften phrase endings.
+- Consonant clarity (`vel`, default 100): 110–130 for English words that get lost; leave Japanese at 100.
+- Breaths: put a breath before phrases where the bank has one. Find it with `search_oto(voicebank, "吸")` or
+  `"br"` / `"breath"`; place a short note (8th) in the gap before the phrase with that lyric, then confirm
+  `has_oto: true` in `list_phonemes`. No breath sample: leave the gap empty.
+- Breathiness/gender (`bre`, `gen`): small values only (bre ≤ 30, gen within ±15). DiffSinger tension,
+  breathiness and dynamics are curves (`tenc`, `brec`, `dyn`); tools cannot draw curves yet — recommend
+  gentle values to the user instead. Extreme values sound robotic.
+- Range: use the range in the bank's readme / `voicebanks.md`. Unknown: flag any note far outside the rest of the
+  melody (more than ~an octave from its middle) and ask before keeping it.
+
+## 7. Musical quality / 音楽性
+
+- Stress: stressed syllables on strong beats and on longer or higher notes; unstressed ones on weak beats and
+  short notes. Japanese: keep pitch accent natural where the melody allows.
+- Motifs: when a motif returns (the user's game uses leitmotifs), keep its rhythm and contour recognizable;
+  change lyrics, not shape.
+- When the agent writes or adapts melody: mostly stepwise, occasional leaps, a leap followed by a step back in
+  the other direction, phrase endings on stable notes.
+
+## 8. Safety and licensing / 安全とライセンス
+
+- Never edit, move or delete voicebank / singer files or OpenUtau settings.
+- Projects go to `Documents\OpenUtau\Projects` (or the user's path). Never overwrite the user's files.
+- Only public-domain material or the user's own songs. No copyrighted lyrics or melodies, including translations
+  of copyrighted lyrics. Traditional tunes are fine, but a modern arrangement or engraved score can be copyrighted:
+  cite the public-domain source.
+- Note every used voicebank's credit and licence terms in the report (see `voicebanks.md`). If the user's use
+  may be commercial and a bank is non-commercial only, say so plainly.
+
+## 9. Self-check before reporting / 報告前の確認
+
+Run `list_notes` and `list_phonemes` for every part and confirm:
+- every note has a lyric; `+` notes only follow a real syllable;
+- no overlaps (`position + duration` ≤ next `position`), no notes shorter than the minimum, no zero lengths;
+- a gap between every phrase;
+- every phoneme `has_oto: true`; phonemizer is the `rank_phonemizers` best for that singer;
+- vibrato only on long notes; expression values inside the defaults above;
+- parts trimmed (`fit_part`); project saved; `get_project.saved` is true.
+Fix what you can; list what you can't.
+
+## 10. Report / 報告
+
+1. What was built: song, source (with link), tempo/key, tracks (singer, phonemizer, score), file path(s).
+2. Lyrics used (final table) and any words changed during the build, with why.
+3. Tool problems and workarounds.
+4. **Listen here first:** the 3 spots most likely to sound off (bar/beat, lyric, why — e.g. vowel-initial word
+   on an 8th, high "ee", consonant cluster before a short note).
+5. Credits and licence notes for every voicebank used.
+6. What you did not do or check (e.g. "did not listen", "pitch curves left default").

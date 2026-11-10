@@ -174,6 +174,7 @@ namespace OpenUtauMcp.Plugin {
                     pan = t.Pan,
                     mute = t.Mute,
                     solo = t.Solo,
+                    voice_colors = t.VoiceColorNames, // clr expression value = index in this list
                 }),
                 voice_parts = parts.Select((v, i) => new {
                     part = i,
