@@ -72,9 +72,11 @@ async def file_tests(c: Client, tmp: str) -> dict:
     ok("/" in err and any("぀" <= ch <= "ヿ" for ch in err), "error message is bilingual", err)
 
     print("[voicebanks]")
-    banks = await c("list_voicebanks")
     # Works with whatever voicebanks are installed: prefer a Japanese and an English one, else reuse any bank.
-    ok(len(banks) > 0, "at least one voicebank installed (the tests need one)", banks)
+    # Only classic UTAU banks with samples: DiffSinger banks have no oto.ini and need other phonemizers.
+    banks = [b for b in await c("list_voicebanks")
+             if b.get("singer_type", "utau") == "utau" and (await c("get_voicebank", voicebank=b["id"]))["alias_count"]]
+    ok(len(banks) > 0, "at least one classic UTAU voicebank installed (the tests need one)", banks)
     ja = next((b for b in banks if "JapanesePresamp" in (b.get("default_phonemizer") or "")), banks[0])
     en = next((b for b in banks if b is not ja and any(k in (b.get("name") or "") + (b.get("default_phonemizer") or "")
                for k in ("English", "Arpasing", "XSampa", "VCCV"))), ja)

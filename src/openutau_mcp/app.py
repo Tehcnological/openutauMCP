@@ -96,4 +96,9 @@ def close(force: bool = False) -> dict:
         except psutil.Error:
             pass
     gone, alive = psutil.wait_procs(procs, timeout=15)
-    return {"closed": not alive, "pids": [p.pid for p in gone]}
+    if alive:
+        return {"closed": False, "still_running": [p.pid for p in alive],
+                "hint": "OpenUtau did not close (it may be busy or showing a dialog). Close it in OpenUtau, "
+                        "or pass force=true if losing unsaved work is OK. / OpenUtau が閉じませんでした。"
+                        "OpenUtau 側で閉じるか、未保存の変更を失ってよければ force=true を指定してください。"}
+    return {"closed": True, "pids": [p.pid for p in gone]}
