@@ -82,6 +82,30 @@ def list_voicebanks() -> list[dict]:
     return sorted(banks, key=lambda b: b["id"])
 
 
+_JA_DEFAULT = "OpenUtau.Plugin.Builtin.JapanesePresampPhonemizer"
+_EN_CHOICES = ("EN ARPA (ArpasingPhonemizer)", "EN VCCV (EnglishVCCVPhonemizer)", "EN X-SAMPA (EnXSampaPhonemizer)")
+
+
+def suggest_phonemizer(bank: dict) -> dict:
+    """Best phonemizer guess for a voicebank: its character.yaml default, else the one the user last picked for it
+    in OpenUtau (prefs.json SingerPhonemizers), else Japanese if its oto aliases are kana."""
+    if bank.get("default_phonemizer"):
+        return {"phonemizer": bank["default_phonemizer"], "source": "character.yaml"}
+    used = (prefs().get("SingerPhonemizers") or {}).get(bank["id"])
+    if used:
+        return {"phonemizer": used, "source": "last used in OpenUtau / OpenUtau で前回使用"}
+    try:
+        aliases = [e["alias"] for e in otos(bank)[:500]]
+    except Exception:  # noqa: BLE001 - unreadable oto: no suggestion
+        aliases = []
+    if aliases and sum(any("぀" <= c <= "ヿ" for c in a) for a in aliases) > len(aliases) / 2:
+        return {"phonemizer": _JA_DEFAULT, "source": "kana aliases / かなエイリアス"}
+    return {"phonemizer": None, "source": None,
+            "hint": "Probably English: try " + ", ".join(_EN_CHOICES) + " and keep the one where list_phonemes shows "
+                    "has_oto=true most often. / 英語音源と思われます。各候補を試し、list_phonemes の has_oto=true が"
+                    "最も多いものを選んでください。"}
+
+
 def find_voicebank(query: str) -> dict:
     banks = list_voicebanks()
     q = query.lower()

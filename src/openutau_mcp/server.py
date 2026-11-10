@@ -18,8 +18,8 @@ Control OpenUtau (singing synthesis) in English or Japanese.
 2. Time is in ticks: 480 ticks = one quarter note (1920 = one 4/4 bar). Note positions are relative to their part.
 3. Pitch: MIDI number or name. C4 = 60 (middle C), A4 = 69, C#4/Db4 = 61, C-1 = 0.
 4. Indexes: "track" = track number; "part" = index among voice parts only; "note" = index in the part, sorted by position.
-5. Lyrics (assign_lyrics / set_lyrics / ustx_assign_lyrics): Japanese = one mora per note (きゃ is one note; っ and ー are
-   their own notes; punctuation is dropped; kanji become hiragana when pykakasi is installed). English = one word per
+5. Lyrics (assign_lyrics / set_lyrics / ustx_assign_lyrics): Japanese = one mora per note (きゃ is one note; っ is its own note;
+   ー becomes a "+" note that holds the previous vowel; punctuation is dropped; kanji become hiragana when pykakasi is installed). English = one word per
    note; write hyphens for syllables ("hel-lo") and the extra syllables become "+" extender notes.
 6. Phonemizer by voicebank: Japanese UTAU bank -> OpenUtau.Plugin.Builtin.JapanesePresampPhonemizer ("JA VCV & CVVC");
    English ARPAsing bank -> ArpasingPhonemizer ("EN ARPA"); English VCCV bank -> EnglishVCCVPhonemizer ("EN VCCV");
@@ -34,7 +34,7 @@ OpenUtau（歌声合成）を英語・日本語で操作します。
 2. 時間はティック単位：四分音符 = 480（4/4 の1小節 = 1920）。音符の位置はパートの先頭からの相対値です。
 3. 音高は MIDI 番号か音名：C4 = 60（中央ド）、A4 = 69、C#4/Db4 = 61、C-1 = 0。
 4. 番号：track はトラック番号、part はボイスパートだけを数えた番号、note はパート内の位置順の番号です。
-5. 歌詞：日本語は1音符1モーラ（「きゃ」で1音符、「っ」「ー」は単独の音符、句読点は除去、pykakasi があれば漢字をひらがなに）。
+5. 歌詞：日本語は1音符1モーラ（「きゃ」で1音符、「っ」は単独の音符、「ー」は前の母音を伸ばす「+」音符、句読点は除去、pykakasi があれば漢字をひらがなに）。
    英語は1音符1単語。音節はハイフンで区切ると（hel-lo）、残りの音節が「+」の延長音符になります。
 6. 音源に合う音素化器：日本語 UTAU 音源 → JapanesePresampPhonemizer、英語 ARPAsing → ArpasingPhonemizer、
    英語 VCCV → EnglishVCCVPhonemizer、英語 X-SAMPA→ EnXSampaPhonemizer、
@@ -227,8 +227,15 @@ def set_key(key: int | str) -> dict:
 @_tool()
 def list_singers() -> list:
     """Singers OpenUtau has loaded: id, name, type, location, default phonemizer, supported renderers.
-    / OpenUtau が読み込んだ歌手一覧（ID、名前、種類、場所、既定の音素化器、対応レンダラー）。"""
-    return bridge.call("singers.list")
+    Singers without a default phonemizer get a "suggested_phonemizer".
+    / OpenUtau が読み込んだ歌手一覧（ID、名前、種類、場所、既定の音素化器、対応レンダラー）。
+    既定の音素化器が無い歌手には "suggested_phonemizer" を付けます。"""
+    singers = bridge.call("singers.list")
+    banks = {b["id"]: b for b in voicebanks.list_voicebanks()}
+    for s in singers:
+        if not s.get("default_phonemizer") and s.get("id") in banks:
+            s["suggested_phonemizer"] = voicebanks.suggest_phonemizer(banks[s["id"]])
+    return singers
 
 
 @_tool()
@@ -363,6 +370,31 @@ def set_lyrics(part: int, text: str, start_index: int = 0, language: str = "auto
     tokens, warnings = _split(text, language)
     result = bridge.call("notes.lyrics", part=part, start=start_index, lyrics=tokens)
     return {"lyrics": tokens, "warnings": warnings, **result}
+
+
+def _bar_ticks(time_signatures: list[dict] | None) -> int:
+    ts = (time_signatures or [{}])[0]
+    return ts.get("beat_per_bar", 4) * 1920 // ts.get("beat_unit", 4)
+
+
+@_tool()
+def add_melody(part: int, melody: str, lyrics: str | None = None, start_tick: int = 0, language: str = "auto") -> dict:
+    """Add a melody with its lyrics in one call. melody: space-separated PITCH:BEATS (r = rest). lyrics are split
+    like set_lyrics and must give one lyric per sounding note (use "+" for held syllables).
+    / メロディと歌詞を一度に追加します。melody は「音名:拍」（r = 休符）。歌詞は set_lyrics と同じ規則で分割され、
+    音の数と一致する必要があります（伸ばす音節は「+」）。"""
+    tokens, warnings = _split(lyrics, language) if lyrics else (None, [])
+    notes = music.melody_notes(melody, tokens, start_tick)
+    return {"lyrics": tokens, "warnings": warnings, **bridge.call("notes.add", part=part, notes=notes)}
+
+
+@_tool()
+def fit_part(part: int) -> dict:
+    """Resize a voice part to end on the first bar line after its last note.
+    / ボイスパートの長さを、最後の音符の後の最初の小節線までに合わせます。"""
+    notes = bridge.call("notes.list", part=part)["notes"]
+    bar = _bar_ticks(bridge.call("project.get").get("time_signatures"))
+    return bridge.call("part.update", part=part, duration=music.fitted_length(notes, bar))
 
 
 # ======================= live: playback & export =======================
@@ -578,6 +610,31 @@ def ustx_assign_lyrics(path: str, part: int, text: str, start_tick: int = 0, dur
     notes = music.layout_notes(tokens, start_tick, durations, tones)
     added = _edit_file(path, lambda p: ustx.add_notes(ustx.voice_part(p, part), notes))
     return {"lyrics": tokens, "warnings": warnings, "added": added}
+
+
+@_tool()
+def ustx_add_melody(path: str, part: int, melody: str, lyrics: str | None = None, start_tick: int = 0,
+                    language: str = "auto") -> dict:
+    """add_melody for a .ustx file. / .ustx ファイル版の add_melody。"""
+    path = os.path.abspath(path)
+    tokens, warnings = _split(lyrics, language) if lyrics else (None, [])
+    notes = music.melody_notes(melody, tokens, start_tick)
+    added = _edit_file(path, lambda p: ustx.add_notes(ustx.voice_part(p, part), notes))
+    return {"lyrics": tokens, "warnings": warnings, "added": added}
+
+
+@_tool()
+def ustx_fit_part(path: str, part: int) -> dict:
+    """fit_part for a .ustx file. / .ustx ファイル版の fit_part。"""
+    path = os.path.abspath(path)
+
+    def fn(p):
+        vp = ustx.voice_part(p, part)
+        vp["duration"] = music.fitted_length(vp["notes"], _bar_ticks(
+            [{"beat_per_bar": t.get("beat_per_bar", 4), "beat_unit": t.get("beat_unit", 4)}
+             for t in p.get("time_signatures") or []]))
+        return {"part": part, "duration": vp["duration"]}
+    return _edit_file(path, fn)
 
 
 @_tool()

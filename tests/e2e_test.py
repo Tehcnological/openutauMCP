@@ -63,7 +63,7 @@ async def file_tests(c: Client, tmp: str) -> dict:
     ok(await c("midi_to_note", midi=61) == "C#4", "61 = C#4")
     ok(await c("beats_to_ticks", beats=1.5) == 720, "1.5 beats = 720 ticks")
     r = await c("split_lyrics", text="きゃりーぱみゅぱみゅ、ちゃっと")
-    ok(r["lyrics"] == ["きゃ", "り", "ー", "ぱ", "みゅ", "ぱ", "みゅ", "ちゃ", "っ", "と"], "Japanese mora split", r)
+    ok(r["lyrics"] == ["きゃ", "り", "+", "ぱ", "みゅ", "ぱ", "みゅ", "ちゃ", "っ", "と"], "Japanese mora split", r)
     r = await c("split_lyrics", text="夜空")
     ok(r["lyrics"] == ["よ", "ぞ", "ら"], "kanji -> hiragana", r)
     r = await c("split_lyrics", text="Hel-lo, beau-ti-ful world!")
@@ -111,6 +111,15 @@ async def file_tests(c: Client, tmp: str) -> dict:
     ok([t["bpm"] for t in s["tempos"]] == [100, 140], "tempo + tempo change", s["tempos"])
     part0 = (await c("ustx_summary", path=path))["voice_parts"][0]
     ok(part0["duration"] >= 14 * 480, "part grew to fit notes", part0)
+    mel = os.path.join(tmp, "melody.ustx")
+    await c("ustx_create", path=mel, bpm=90)
+    await c("ustx_add_voice_part", path=mel, track=0, duration=7680)
+    await c("ustx_add_melody", path=mel, part=0, melody="A4:1 A4:1 B4:2 r:1/2 C5:3/2", lyrics="さくらー")
+    notes = (await c("ustx_list_notes", path=mel, part=0))["notes"]
+    ok([(n["lyric"], n["tone"], n["position"], n["duration"]) for n in notes] ==
+       [("さ", 69, 0, 480), ("く", 69, 480, 480), ("ら", 71, 960, 960), ("+", 72, 2160, 720)], "add melody with lyrics", notes)
+    await c.error("ustx_add_melody", path=mel, part=0, melody="A4 B4", lyrics="あ")
+    ok((await c("ustx_fit_part", path=mel, part=0))["duration"] == 3840, "fit part to the next bar line")
 
     print("[ust import/export]")
     await c("ustx_add_notes", path=path, part=0, notes=[{"position": 12480, "duration": 480, "tone": 69, "lyric": "ら"}])

@@ -149,6 +149,7 @@ namespace OpenUtauMcp.Plugin {
         // ---------- project ----------
 
         static object ProjectSummary() {
+            Doc.FlushValidation(); // apply the edit's pending validation now, or the summary is one step stale
             var p = Project;
             var parts = VoiceParts();
             return new {
@@ -342,7 +343,8 @@ namespace OpenUtauMcp.Plugin {
                 ?? all.FirstOrDefault(f => string.Equals(f.type.Name, q, StringComparison.OrdinalIgnoreCase))
                 ?? all.FirstOrDefault(f => string.Equals(f.tag, q, StringComparison.OrdinalIgnoreCase))
                 ?? all.FirstOrDefault(f => string.Equals(f.name, q, StringComparison.OrdinalIgnoreCase))
-                ?? throw new ArgumentException($"Phonemizer '{q}' not found; use list_phonemizers");
+                ?? throw new ArgumentException($"Phonemizer '{q}' not found. Available tags: " +
+                    string.Join(", ", PhonemizerFactory.GetAll().Select(f => f.tag).Distinct()));
         }
 
         /// <summary>Mirrors the track header: singer, then preferred/default phonemizer, then a suitable renderer.</summary>

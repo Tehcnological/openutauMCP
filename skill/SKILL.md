@@ -38,6 +38,11 @@ description: Compose and edit singing in OpenUtau (English and Japanese lyrics) 
    phonemizer or singer. / `has_oto: false` があれば歌詞・音素化器・歌手を見直す。
 6. `play(tick=0)` / `stop`, then `save_project(path)` and `export_wav(path)`.
 
+Melody and lyrics together: `add_melody(part, melody="A4:1 A4:1 B4:2 r:1", lyrics="さくら")` (beats are quarter notes,
+r = rest; one lyric per sounding note). Then `fit_part(part)` to trim the part to the last bar.
+Singer without a default phonemizer: `list_singers` gives `suggested_phonemizer`; confirm with `list_phonemes`.
+/ メロディと歌詞は add_melody で一度に入力し、fit_part でパートの長さを合わせます。
+
 ## 3. Edit an existing song / 既存曲の編集
 
 1. `open_project(path)` → `get_project` → `list_notes(part)`.
@@ -48,7 +53,7 @@ description: Compose and edit singing in OpenUtau (English and Japanese lyrics) 
 
 ## 4. Lyrics / 歌詞
 
-- Japanese: one mora per note (きゃ = 1 note; っ and ー are separate notes). Kanji → hiragana if pykakasi is installed;
+- Japanese: one mora per note (きゃ = 1 note; っ is a separate note; ー becomes a "+" note holding the previous vowel). Kanji → hiragana if pykakasi is installed;
   otherwise write kana. Romaji works when separated by spaces.
   / 日本語は1音符1モーラ。漢字は pykakasi があればひらがなに。ローマ字はスペース区切り。
 - English: one word per note. For a word over several notes write hyphens: `beau-ti-ful` → `beautiful + +`.

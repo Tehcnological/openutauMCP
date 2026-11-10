@@ -8,7 +8,8 @@ from .errors import OpenUtauError
 _KANA = re.compile(r"[぀-ヿㇰ-ㇿｦ-ﾟ]")
 _KANJI = re.compile(r"[㐀-䶿一-鿿豈-﫿々〆]")
 _SMALL = set("ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ")
-_OWN = set("っッー")
+_OWN = set("っッ")
+_LONG = set("ーｰ〜～")  # long vowel: holds the previous mora, so it becomes a "+" extender note
 _EXTENDERS = {"+", "+~", "+*"}
 
 
@@ -48,7 +49,11 @@ def _split_japanese(text: str, warnings: list[str]) -> list[str]:
         if word:
             tokens.append(word.lower() if not word.startswith("+") else word)
             word = ""
-        if ch in _SMALL and prev_kana and ch not in _OWN:
+        if ch in _LONG:
+            if tokens:
+                tokens.append("+")
+            prev_kana = False
+        elif ch in _SMALL and prev_kana and ch not in _OWN:
             tokens[-1] += ch
         elif ch in _OWN or _KANA.match(ch):
             tokens.append(ch)
