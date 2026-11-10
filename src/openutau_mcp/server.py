@@ -227,7 +227,7 @@ def set_key(key: int | str) -> dict:
 @_tool()
 def list_singers() -> list:
     """Singers OpenUtau has loaded: id, name, type, location, default phonemizer, supported renderers.
-    Singers without a default phonemizer get a "suggested_phonemizer".
+    Singers without a default phonemizer get a "suggested_phonemizer" (a guess: confirm with rank_phonemizers).
     / OpenUtau が読み込んだ歌手一覧（ID、名前、種類、場所、既定の音素化器、対応レンダラー）。
     既定の音素化器が無い歌手には "suggested_phonemizer" を付けます。"""
     singers = bridge.call("singers.list")
@@ -243,6 +243,31 @@ def list_phonemizers(language: str | None = None) -> list:
     """Installed phonemizers (type, name, tag, language, author); filter by language such as "EN" or "JA".
     / インストール済みの音素化器一覧。language（"EN"・"JA" など）で絞り込めます。"""
     return bridge.call("phonemizers.list", language=language)
+
+
+_SAMPLE_WORDS = {
+    "EN": "hello world this is a test we sing beautiful songs of light and love through the night",
+    "JA": "さくら さくら やよいの そらは みわたす かぎり きゃっと しゅんかん",
+}
+
+
+@_tool()
+def rank_phonemizers(singer: str, language: str | None = None, text: str | None = None) -> dict:
+    """Find the best phonemizer for a singer by trying each installed classic phonemizer on sample lyrics and
+    counting how many of the sounds it asks for exist in the voicebank (score 1.0 = every sound has a sample).
+    language: "EN", "JA" or omitted for both; text: your own lyrics instead of the built-in samples.
+    Nothing in the project changes. / 各音素化器でサンプル歌詞を音素化し、音源にサンプルがある音の割合で順位付けします
+    （1.0 = すべての音にサンプルあり）。プロジェクトは変更しません。"""
+    langs = [language.upper()] if language else ["EN", "JA"]
+    out = []
+    for lang in langs:
+        words = _split(text or _SAMPLE_WORDS.get(lang, _SAMPLE_WORDS["EN"]), "ja" if lang == "JA" else "en")[0]
+        words = [w for w in words if not w.startswith("+")]
+        out += bridge.call("phonemizers.rank", timeout=300, singer=singer, language=lang, words=words)["ranking"]
+    # Converters ("EN to JA") turn English into Japanese sounds; on a tie, a native phonemizer is the better pick.
+    out.sort(key=lambda r: (r["score"], " to " not in r["tag"], r["phonemes"]), reverse=True)
+    best = next((r for r in out if r["phonemes"] and not r["error"]), None)
+    return {"singer": singer, "best": best and best["type"], "best_tag": best and best["tag"], "ranking": out}
 
 
 @_tool()

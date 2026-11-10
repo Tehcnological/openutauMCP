@@ -58,6 +58,7 @@ namespace OpenUtauMcp.Plugin {
                 case "notes.delete": return Mutate("delete notes", () => DeleteNotes(a));
                 case "notes.expression": return Mutate("set expression", () => SetExpression(a));
                 case "phonemes.list": return ListPhonemes(a);
+                case "phonemizers.rank": return Task.Run(() => RankPhonemizers(a)); // off the UI thread: can be slow
                 case "playback.play": return Ui(() => Play(a));
                 case "playback.pause": return Ui(() => { PlaybackManager.Inst.PausePlayback(); return PlayState(); });
                 case "playback.stop": return Ui(() => { PlaybackManager.Inst.StopPlayback(); return PlayState(); });
@@ -343,8 +344,70 @@ namespace OpenUtauMcp.Plugin {
                 ?? all.FirstOrDefault(f => string.Equals(f.type.Name, q, StringComparison.OrdinalIgnoreCase))
                 ?? all.FirstOrDefault(f => string.Equals(f.tag, q, StringComparison.OrdinalIgnoreCase))
                 ?? all.FirstOrDefault(f => string.Equals(f.name, q, StringComparison.OrdinalIgnoreCase))
-                ?? throw new ArgumentException($"Phonemizer '{q}' not found. Available tags: " +
-                    string.Join(", ", PhonemizerFactory.GetAll().Select(f => f.tag).Distinct()));
+                ?? throw new ArgumentException($"Phonemizer '{q}' is not installed in this OpenUtau. " + SimilarTags(q, all) +
+                    "Use rank_phonemizers to find the best installed one for a singer.");
+        }
+
+        // Same-language tags first, so "EN CVVC" answers with the English phonemizers that do exist.
+        static string SimilarTags(string q, PhonemizerFactory[] all) {
+            var lang = q.Split(' ', '-')[0];
+            var same = all.Where(f => f.tag.StartsWith(lang + " ", StringComparison.OrdinalIgnoreCase)).Select(f => f.tag).ToList();
+            return same.Count > 0 ? $"Installed {lang.ToUpperInvariant()} phonemizers: {string.Join(", ", same)}. "
+                                  : $"Installed tags: {string.Join(", ", all.Select(f => f.tag).Distinct())}. ";
+        }
+
+        /// <summary>
+        /// Runs each candidate phonemizer on sample lyrics for a singer, the way OpenUtau's phonemizer runner does,
+        /// and counts how many produced phonemes the voicebank has a sample for. Nothing in the project changes.
+        /// </summary>
+        static object RankPhonemizers(JsonObject a) {
+            var singer = FindSinger(Str(a, "singer"));
+            var words = a["words"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+            int tone = OptInt(a, "tone") ?? 60;
+            var langs = OptStr(a, "language")?.ToUpperInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var candidates = PhonemizerFactory.GetAll().Where(f =>
+                f.type.Namespace == "OpenUtau.Plugin.Builtin" // classic UTAU phonemizers; DiffSinger/ENUNU/etc. need their own singer types
+                && (langs == null || langs.Contains(f.language?.ToUpperInvariant())));
+            var groups = words.Select((w, i) => new[] { new Phonemizer.Note {
+                lyric = w, tone = tone, position = i * 480, duration = 480, phonemeAttributes = new Phonemizer.PhonemeAttributes[0],
+            } }).ToArray();
+            var track = Project.tracks.FirstOrDefault() ?? new UTrack(Project);
+            var results = new List<object>();
+            foreach (var f in candidates) {
+                int total = 0, found = 0;
+                var missing = new List<string>();
+                string error = null;
+                try {
+                    var p = f.Create();
+                    p.SetSinger(singer);
+                    p.SetTiming(Project.timeAxis);
+                    p.SetUp(groups, Project, track);
+                    for (int i = 0; i < groups.Length; i++) {
+                        Phonemizer.Note? prev = i > 0 ? groups[i - 1][0] : null;
+                        Phonemizer.Note? next = i < groups.Length - 1 ? groups[i + 1][0] : null;
+                        var r = p.Process(groups[i], prev, next, prev, next, i > 0 ? groups[i - 1] : new Phonemizer.Note[0]);
+                        foreach (var ph in r.phonemes ?? new Phonemizer.Phoneme[0]) {
+                            if (string.IsNullOrEmpty(ph.phoneme)) continue;
+                            total++;
+                            if (singer.TryGetMappedOto(ph.phoneme, tone, out _)) found++;
+                            else if (missing.Count < 12 && !missing.Contains(ph.phoneme)) missing.Add(ph.phoneme);
+                        }
+                    }
+                    p.CleanUp();
+                } catch (Exception e) {
+                    error = $"{e.GetType().Name}: {e.Message}";
+                }
+                results.Add(new {
+                    tag = f.tag, type = f.type.FullName, language = f.language,
+                    score = total == 0 ? 0.0 : Math.Round((double)found / total, 3),
+                    phonemes = total, with_sample = found, missing, error,
+                });
+            }
+            return new {
+                singer = singer.Id,
+                words,
+                ranking = results.OrderByDescending(r => ((dynamic)r).score).ThenByDescending(r => ((dynamic)r).phonemes).ToList(),
+            };
         }
 
         /// <summary>Mirrors the track header: singer, then preferred/default phonemizer, then a suitable renderer.</summary>

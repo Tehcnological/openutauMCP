@@ -163,6 +163,11 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
     ok(not any("OpenUtauMcp" in t for t in types), "bridge carrier is not in the phonemizer list")
     singers = await c("list_singers")
     ok({ctx["ja"]["id"], ctx["en"]["id"]} <= {s["id"] for s in singers}, "voicebank ids match OpenUtau singer ids")
+    r = await c("rank_phonemizers", singer=ctx["ja"]["id"], language="JA")
+    ok(r["best"] and r["ranking"][0]["score"] > 0 and " to " not in r["best_tag"], "rank_phonemizers picks a native phonemizer",
+       r["ranking"][:3])
+    err = await c.error("update_track", track=0, phonemizer="EN CVVC")
+    ok("Installed EN phonemizers" in err, "unknown phonemizer lists same-language ones", err)
 
     print("[live: project]")
     p = await c("open_project", path=ctx["path"])

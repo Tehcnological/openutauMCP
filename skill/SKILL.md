@@ -40,7 +40,8 @@ description: Compose and edit singing in OpenUtau (English and Japanese lyrics) 
 
 Melody and lyrics together: `add_melody(part, melody="A4:1 A4:1 B4:2 r:1", lyrics="さくら")` (beats are quarter notes,
 r = rest; one lyric per sounding note). Then `fit_part(part)` to trim the part to the last bar.
-Singer without a default phonemizer: `list_singers` gives `suggested_phonemizer`; confirm with `list_phonemes`.
+Choosing a phonemizer: `rank_phonemizers(singer)` tries every installed one on sample lyrics and ranks them by how many
+sounds the voicebank has; use `best`. Only installed phonemizers exist (there is no "EN CVVC" in stock OpenUtau).
 / メロディと歌詞は add_melody で一度に入力し、fit_part でパートの長さを合わせます。
 
 ## 3. Edit an existing song / 既存曲の編集

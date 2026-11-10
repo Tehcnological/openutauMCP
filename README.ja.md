@@ -115,7 +115,7 @@ Claude にこう頼みます。
   `import_tracks`、`undo`、`redo`）、テンポ・拍子・キー、一覧（`list_singers`、`list_phonemizers`、
   `list_expressions`）、トラック、パート、音符（`list_notes`、`add_notes`、`edit_notes`、`replace_lyrics`、
   `delete_notes`、`set_note_expression`）、歌詞（`assign_lyrics`、`set_lyrics`）、メロディと歌詞を一度に（`add_melody`、例 `A4:1 A4:1 B4:2 r:1`）、
-  `fit_part`（パートを音符に合わせて伸縮）、`list_phonemes`、
+  `fit_part`（パートを音符に合わせて伸縮）、`rank_phonemizers`（歌手に最適な音素化器）、`list_phonemes`、
   再生（`play`、`pause`、`stop`、`seek`）、書き出し（`export_wav`、`export_midi`）
 - **ファイル（OpenUtau を閉じたままで可）**：`ustx_create`、`ustx_summary`、`ustx_set_tempo`、`ustx_add_track`、
   `ustx_set_track_singer`、`ustx_add_voice_part`、`ustx_add_notes`、`ustx_list_notes`、`ustx_edit_notes`、

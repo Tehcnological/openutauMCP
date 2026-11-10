@@ -117,7 +117,7 @@ undo step in OpenUtau.
   `redo`), tempo/time signature/key, catalog (`list_singers`, `list_phonemizers`, `list_expressions`), tracks,
   parts, notes (`list_notes`, `add_notes`, `edit_notes`, `replace_lyrics`, `delete_notes`, `set_note_expression`),
   lyrics (`assign_lyrics`, `set_lyrics`), melody + lyrics in one call (`add_melody`, e.g. `A4:1 A4:1 B4:2 r:1`),
-  `fit_part` (shrink/grow a part to its notes), `list_phonemes`, playback (`play`, `pause`, `stop`, `seek`),
+  `fit_part` (shrink/grow a part to its notes), `rank_phonemizers` (best phonemizer for a singer), `list_phonemes`, playback (`play`, `pause`, `stop`, `seek`),
   export (`export_wav`, `export_midi`)
 - **Files (OpenUtau may be closed)**: `ustx_create`, `ustx_summary`, `ustx_set_tempo`, `ustx_add_track`,
   `ustx_set_track_singer`, `ustx_add_voice_part`, `ustx_add_notes`, `ustx_list_notes`, `ustx_edit_notes`,

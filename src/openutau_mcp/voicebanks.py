@@ -101,9 +101,8 @@ def suggest_phonemizer(bank: dict) -> dict:
     if aliases and sum(any("぀" <= c <= "ヿ" for c in a) for a in aliases) > len(aliases) / 2:
         return {"phonemizer": _JA_DEFAULT, "source": "kana aliases / かなエイリアス"}
     return {"phonemizer": None, "source": None,
-            "hint": "Probably English: try " + ", ".join(_EN_CHOICES) + " and keep the one where list_phonemes shows "
-                    "has_oto=true most often. / 英語音源と思われます。各候補を試し、list_phonemes の has_oto=true が"
-                    "最も多いものを選んでください。"}
+            "hint": "Probably English (" + ", ".join(_EN_CHOICES) + "): run rank_phonemizers to pick the one whose "
+                    "sounds the bank actually has. / 英語音源と思われます。rank_phonemizers で最適なものを選んでください。"}
 
 
 def find_voicebank(query: str) -> dict:
