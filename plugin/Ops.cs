@@ -363,6 +363,7 @@ namespace OpenUtauMcp.Plugin {
         /// </summary>
         static object RankPhonemizers(JsonObject a) {
             var singer = FindSinger(Str(a, "singer"));
+            singer.EnsureLoaded(); // banks no track uses are not loaded yet, so every oto lookup would fail
             var words = a["words"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
             int tone = OptInt(a, "tone") ?? 60;
             var langs = OptStr(a, "language")?.ToUpperInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries);

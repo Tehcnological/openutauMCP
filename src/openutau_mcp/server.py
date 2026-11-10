@@ -266,7 +266,12 @@ def rank_phonemizers(singer: str, language: str | None = None, text: str | None 
         out += bridge.call("phonemizers.rank", timeout=300, singer=singer, language=lang, words=words)["ranking"]
     # Converters ("EN to JA") turn English into Japanese sounds; on a tie, a native phonemizer is the better pick.
     out.sort(key=lambda r: (r["score"], " to " not in r["tag"], r["phonemes"]), reverse=True)
-    best = next((r for r in out if r["phonemes"] and not r["error"]), None)
+    best = next((r for r in out if r["score"] > 0 and not r["error"]), None)
+    # Coverage often ties (rich banks cover several styles); then the bank author's default is the better pick.
+    default = next((s.get("default_phonemizer") for s in bridge.call("singers.list") if s.get("id") == singer), None)
+    pick = next((r for r in out if r["type"] == default and not r["error"]), None)
+    if best and pick and pick["score"] >= best["score"] - 0.03:
+        best = pick
     return {"singer": singer, "best": best and best["type"], "best_tag": best and best["tag"], "ranking": out}
 
 
