@@ -83,8 +83,14 @@ Do not render/export audio unless asked. Do not play audio without being asked.
 
 ## 6. Pitch and expression defaults / ピッチと表情
 
-- Portamento: keep OpenUtau's default short slide between notes. Bigger slides only for emotional moments
-  (tools cannot draw pitch curves; ask the user to draw them in OpenUtau and say where).
+- Portamento: keep OpenUtau's default short slide between notes. Bigger slides only for emotional moments.
+- Pitch curves (`set_pitch(part, indices, points, snap_first)`; x = ms from note start, y = tenths of a semitone,
+  `get`/check with `list_notes` → `pitch`). Use sparingly, a few notes per phrase:
+  - Scoop into a phrase's first or an emphasised note (`snap_first=false`): `[{x:-40,y:-20},{x:60,y:0}]`.
+  - Fall/drift at a phrase end, last ~30% of the note: `[{x:-40,y:0},{x:40,y:0},{x:<70% of ms>,y:0},
+    {x:<note ms>,y:-30,shape:"i"}]` (note ms = duration ticks × 60000 / (480 × BPM)).
+  - Small overshoot on an upward leap: `[{x:-40,y:0},{x:60,y:5},{x:140,y:0}]`.
+  Keep |y| ≤ 30 (3 semitones) except for deliberate effects. Normal notes: leave the default points.
 - Vibrato (`edit_notes` → `vibrato`): only on notes ≥ 1 beat (480). Defaults: `length` 40–60 (starts partway in),
   `depth` 15–25 cents, `period` 170–200 ms, `in` 20, `out` 20. Never on short notes.
 - Phrase volume (`set_note_expression "vol"`, default 100): rise and fall across the phrase, e.g. first note 90,
@@ -93,9 +99,13 @@ Do not render/export audio unless asked. Do not play audio without being asked.
 - Breaths: put a breath before phrases where the bank has one. Find it with `search_oto(voicebank, "吸")` or
   `"br"` / `"breath"`; place a short note (8th) in the gap before the phrase with that lyric, then confirm
   `has_oto: true` in `list_phonemes`. No breath sample: leave the gap empty.
-- Breathiness/gender (`bre`, `gen`): small values only (bre ≤ 30, gen within ±15). DiffSinger tension,
-  breathiness and dynamics are curves (`tenc`, `brec`, `dyn`); tools cannot draw curves yet — recommend
-  gentle values to the user instead. Extreme values sound robotic.
+- Breathiness/gender (`bre`, `gen`): small values only (bre ≤ 30, gen within ±15).
+- Expression curves (`set_curve(part, abbr, [[tick, value], ...])`, part-relative ticks, straight lines between
+  points; `get_curve` to read, `clear_curve` to reset): `dyn` dynamics, and on DiffSinger banks `tenc` tension,
+  `brec` breathiness, `genc` gender, `voic` voicing. Gentle shapes per phrase: `dyn` 0 → peak 0 to +20 → -40 at the
+  phrase end; `tenc` 0–30 only at climaxes; `brec` 10–30 on soft or ending notes. Stay within about a third of each
+  curve's range (`get_curve` gives min/max); extreme values sound robotic.
+- New voicebank installed while OpenUtau is open: `refresh_singers` instead of restarting.
 - Range: use the range in the bank's readme / `voicebanks.md`. Unknown: flag any note far outside the rest of the
   melody (more than ~an octave from its middle) and ask before keeping it.
 

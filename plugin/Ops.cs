@@ -43,6 +43,11 @@ namespace OpenUtauMcp.Plugin {
                 case "timesig.set": return Mutate("set time signature", () => SetTimeSig(a));
                 case "key.set": return Mutate("set key", () => SetKey(a));
                 case "singers.list": return Ui(ListSingers);
+                case "singers.refresh": return Ui(() => {
+                    Doc.ExecuteCmd(new SingersChangedNotification()); // rescans the Singers folder, like OpenUtau's refresh button
+                    Doc.ExecuteCmd(new SingersRefreshedNotification());
+                    return ListSingers();
+                });
                 case "phonemizers.list": return Ui(() => ListPhonemizers(a));
                 case "expressions.list": return Ui(ListExpressions);
                 case "track.add": return Mutate("add track", () => AddTrack(a));
@@ -57,6 +62,10 @@ namespace OpenUtauMcp.Plugin {
                 case "notes.lyrics": return Mutate("replace lyrics", () => ReplaceLyrics(a));
                 case "notes.delete": return Mutate("delete notes", () => DeleteNotes(a));
                 case "notes.expression": return Mutate("set expression", () => SetExpression(a));
+                case "notes.pitch": return Mutate("set pitch points", () => SetPitch(a));
+                case "curve.get": return Ui(() => GetCurve(a));
+                case "curve.set": return Mutate("draw curve", () => SetCurve(a));
+                case "curve.clear": return Mutate("clear curve", () => ClearCurve(a));
                 case "phonemes.list": return ListPhonemes(a);
                 case "phonemizers.rank": return Task.Run(() => RankPhonemizers(a)); // off the UI thread: can be slow
                 case "playback.play": return Ui(() => Play(a));
@@ -120,6 +129,7 @@ namespace OpenUtauMcp.Plugin {
         static bool? OptBool(JsonObject a, string k) => Has(a, k) ? a[k]!.GetValue<bool>() : null;
         static string Str(JsonObject a, string k) => Has(a, k) ? a[k]!.GetValue<string>() : throw new ArgumentException($"Missing '{k}'");
         static string OptStr(JsonObject a, string k) => Has(a, k) ? a[k]!.GetValue<string>() : null;
+        static List<int> Ints(JsonObject a, string k) => OptInts(a, k) ?? throw new ArgumentException($"Missing '{k}'");
         static List<int> OptInts(JsonObject a, string k) => Has(a, k) ? a[k]!.AsArray().Select(n => n!.GetValue<int>()).ToList() : null;
 
         static UTrack Track(int no) {
@@ -557,7 +567,67 @@ namespace OpenUtauMcp.Plugin {
             },
             // Only values set on the note (defaults are omitted). index = phoneme index within the note.
             expressions = n.phonemeExpressions.Select(e => new { abbr = e.abbr, index = e.index, value = e.value }).ToList(),
+            pitch = new { snap_first = n.pitch.snapFirst, points = n.pitch.data.Select(p => new { x = p.X, y = p.Y, shape = p.shape.ToString() }) },
         };
+
+        // ---------- pitch points & curves ----------
+
+        /// <summary>Replaces the pitch points of the given notes. x = ms from note start, y = tenths of a semitone.</summary>
+        static object SetPitch(JsonObject a) {
+            var part = Part(a);
+            var pts = a["points"]!.AsArray().Select(n => {
+                var o = n!.AsObject();
+                var shape = OptStr(o, "shape") ?? "io";
+                if (!Enum.TryParse<PitchPointShape>(shape, out var sh)) throw new ArgumentException($"Pitch shape '{shape}' must be io, i, o or l");
+                return new PitchPoint((float)o["x"]!.GetValue<double>(), (float)o["y"]!.GetValue<double>(), sh);
+            }).OrderBy(p => p.X).ToList();
+            if (pts.Count < 2) throw new ArgumentException("Give at least 2 pitch points");
+            var pitch = new UPitch { snapFirst = OptBool(a, "snap_first") ?? true };
+            pts.ForEach(pitch.AddPoint);
+            var notes = Notes(part, Ints(a, "indices"));
+            Doc.ExecuteCmd(new SetPitchPointsCommand(part, notes, pitch));
+            return new { notes = notes.Count, points = pts.Count };
+        }
+
+        static UExpressionDescriptor CurveDescriptor(UVoicePart part, string abbr) {
+            if (!Track(part.trackNo).TryGetExpDescriptor(Project, abbr, out var desc)) {
+                throw new ArgumentException($"Expression '{abbr}' not found; use list_expressions");
+            }
+            if (desc.type != UExpressionType.Curve) throw new ArgumentException($"Expression '{abbr}' is not a curve; use set_note_expression");
+            return desc;
+        }
+
+        static object GetCurve(JsonObject a) {
+            var part = Part(a);
+            var abbr = Str(a, "abbr").ToLowerInvariant();
+            var desc = CurveDescriptor(part, abbr);
+            var c = part.curves.FirstOrDefault(x => x.abbr == abbr);
+            return new { abbr, min = desc.min, max = desc.max, @default = desc.defaultValue,
+                         points = c == null ? new List<int[]>() : c.xs.Zip(c.ys, (x, y) => new[] { x, y }).ToList() };
+        }
+
+        /// <summary>Draws straight segments through [tick, value] points (part-relative ticks), like the curve pen.</summary>
+        static object SetCurve(JsonObject a) {
+            var part = Part(a);
+            var abbr = Str(a, "abbr").ToLowerInvariant();
+            CurveDescriptor(part, abbr);
+            var pts = a["points"]!.AsArray().Select(n => n!.AsArray().Select(v => (int)Math.Round(v!.GetValue<double>())).ToArray())
+                .OrderBy(p => p[0]).ToList();
+            if (pts.Count == 0 || pts.Any(p => p.Length != 2)) throw new ArgumentException("points must be [[tick, value], ...]");
+            for (int i = 0; i < pts.Count; i++) {
+                var prev = i == 0 ? pts[0] : pts[i - 1];
+                Doc.ExecuteCmd(new SetCurveCommand(Project, part, abbr, pts[i][0], pts[i][1], prev[0], prev[1]));
+            }
+            return new { abbr, segments = Math.Max(0, pts.Count - 1) };
+        }
+
+        static object ClearCurve(JsonObject a) {
+            var part = Part(a);
+            var abbr = Str(a, "abbr").ToLowerInvariant();
+            CurveDescriptor(part, abbr);
+            Doc.ExecuteCmd(new ClearCurveCommand(part, abbr));
+            return new { abbr, cleared = true };
+        }
 
         static object ListNotes(JsonObject a) {
             var part = Part(a);

@@ -374,6 +374,52 @@ def set_note_expression(part: int, abbr: str, value: float | None, indices: list
     return bridge.call("notes.expression", part=part, abbr=abbr, value=value, indices=indices)
 
 
+class PitchPoint(BaseModel):
+    x: float = Field(description="Milliseconds from the note start (negative = before it). / 音符の開始からのミリ秒（負 = 前）")
+    y: float = Field(description="Offset from the note's pitch in tenths of a semitone (10 = 1 semitone, -5 = a quarter tone "
+                                 "flat). / 音符の音高からのずれ（0.1 半音単位、10 = 半音）")
+    shape: str = Field("io", description="Curve to the next point: io (ease in-out), i, o, l (linear). / 次の点への曲線形状")
+
+
+@_tool()
+def set_pitch(part: int, indices: list[int], points: list[PitchPoint], snap_first: bool = True) -> dict:
+    """Replace the pitch curve of notes (scoops, falls, drifts, overshoot). At least 2 points. snap_first=true makes the
+    first point start from the previous note's pitch, overriding its y (a normal slide); use false for a scoop or any
+    start you set yourself. Examples: scoop up into a note (snap_first=false): [{x:-40,y:-20},{x:60,y:0}];
+    fall at a phrase end on a 600 ms note: [{x:-40,y:0},{x:40,y:0},{x:420,y:0},{x:600,y:-30,shape:"i"}].
+    / 音符のピッチ曲線を置き換えます（しゃくり・フォール・揺れ）。点は2つ以上。"""
+    return bridge.call("notes.pitch", part=part, indices=indices,
+                       points=[p.model_dump() for p in points], snap_first=snap_first)
+
+
+@_tool()
+def get_curve(part: int, abbr: str) -> dict:
+    """Read an expression curve of a part (e.g. dyn, pitd, tenc, brec, genc, voic): [tick, value] points, min/max/default.
+    / パートの表情カーブを読みます（dyn・tenc・brec など）。"""
+    return bridge.call("curve.get", part=part, abbr=abbr)
+
+
+@_tool()
+def set_curve(part: int, abbr: str, points: list[list[float]]) -> dict:
+    """Draw an expression curve through [tick, value] points (part-relative ticks), straight lines between them; values
+    are clamped to the curve's range. Use for dynamics (dyn), DiffSinger tension (tenc), breathiness (brec), gender
+    (genc), voicing (voic), pitch deviation (pitd, cents). / [ティック, 値] の点を直線で結んで表情カーブを描きます。"""
+    return bridge.call("curve.set", part=part, abbr=abbr, points=points)
+
+
+@_tool()
+def clear_curve(part: int, abbr: str) -> dict:
+    """Reset an expression curve of a part to its default. / 表情カーブを既定値に戻します。"""
+    return bridge.call("curve.clear", part=part, abbr=abbr)
+
+
+@_tool()
+def refresh_singers() -> list:
+    """Rescan the Singers folder so newly installed voicebanks appear without restarting OpenUtau.
+    / Singers フォルダを再読み込みし、新しく入れた音源を OpenUtau の再起動なしで使えるようにします。"""
+    return bridge.call("singers.refresh", timeout=300)
+
+
 @_tool()
 def list_phonemes(part: int) -> dict:
     """Phonemes OpenUtau produced for a part (note index, lyric, position, duration, phoneme, has_oto).

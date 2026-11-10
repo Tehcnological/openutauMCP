@@ -210,6 +210,20 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
     ok(not any(e["abbr"] == "vel" for es in exps for e in es), "undo removes the expression", exps)
     await c.error("set_note_expression", part=0, abbr="dyn", value=1)
 
+    print("[live: pitch + curves]")
+    await c("set_pitch", part=0, indices=[2], points=[{"x": -40, "y": -20}, {"x": 60, "y": 0}, {"x": 300, "y": -30, "shape": "i"}],
+            snap_first=False)
+    pitch = (await c("list_notes", part=0))["notes"][2]["pitch"]
+    ok([(p["x"], p["y"]) for p in pitch["points"]] == [(-40, -20), (60, 0), (300, -30)] and pitch["points"][2]["shape"] == "i",
+       "pitch points replaced", pitch)
+    await c("set_curve", part=0, abbr="dyn", points=[[0, 0], [960, -60], [1920, 0]])
+    cur = await c("get_curve", part=0, abbr="dyn")
+    ok(any(x == 960 and y == -60 for x, y in cur["points"]), "dynamics curve drawn", cur["points"][:8])
+    await c("clear_curve", part=0, abbr="dyn")
+    ok(all(y == 0 for _, y in (await c("get_curve", part=0, abbr="dyn"))["points"]), "curve cleared")
+    await c.error("set_curve", part=0, abbr="vel", points=[[0, 1]])
+    ok(any(s["id"] == ctx["ja"]["id"] for s in await c("refresh_singers")), "refresh singers keeps installed banks")
+
     print("[live: tempo / key / tracks]")
     p = await c("set_tempo", bpm=150)
     ok(p["tempos"][0]["bpm"] == 150, "tempo set live")
