@@ -44,6 +44,9 @@ Do not render/export audio unless asked. Do not play audio without being asked.
 - Classic UTAU banks: phonemizer must match the bank's sample style (CV/VCV/CVVC Japanese, ARPAsing, VCCV,
   X-SAMPA, C+V English). DiffSinger banks: use a `DIFFS <lang>` phonemizer and the DiffSinger renderer;
   classic phonemizers do not work on them.
+  A DiffSinger bank also needs the vocoder named in its `dsconfig.yaml` (`vocoder:`), either in the bank's
+  own `dsvocoder` folder or in `Documents\OpenUtau\Dependencies`; if it is missing the track renders silent,
+  so tell the user instead of building on it.
 - Voice colors (subbanks): `get_project` → track `voice_colors`; set with
   `set_note_expression(part, "clr", <index in voice_colors>, indices)`. Do not type color suffixes into lyrics.
 - English lyrics on a Japanese-only bank: `ENtoJAPhonemizer` ("EN to JA"), and expect an accent.
