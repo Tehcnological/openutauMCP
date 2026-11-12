@@ -79,7 +79,8 @@ Optional environment variables: `OPENUTAU_EXE` (path to OpenUtau.exe), `OPENUTAU
 `Documents\OpenUtau`), `OPENUTAU_MCP_PORT` (default 51128; set the same variable for OpenUtau to move the plugin).
 
 Optionally copy `skill/SKILL.md` into your Claude skills folder (e.g. `.claude/skills/openutau/SKILL.md`) for
-step-by-step workflows.
+step-by-step workflows. `skill/mix_stems.py` (copy it next to `SKILL.md`) is the helper the skill uses to line up,
+level, pan and mix exported WAV stems into one stereo file.
 
 ## Usage
 
