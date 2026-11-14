@@ -78,7 +78,14 @@ claude mcp add openutau -- "C:\path\to\openutau-mcp\.venv\Scripts\openutau-mcp.e
 任意の環境変数：`OPENUTAU_EXE`（OpenUtau.exe のパス）、`OPENUTAU_DATA_DIR`（既定 `Documents\OpenUtau`）、
 `OPENUTAU_MCP_PORT`（既定 51128。OpenUtau 側にも同じ変数を設定するとプラグインのポートも変わります）。
 
+ブリッジが起動しない場合（OpenUtau のログに socket error 10013）、そのポートが Windows の予約範囲に入っています
+（`netsh interface ipv4 show excludedportrange protocol=tcp` で確認）。管理者で `net stop winnat` → `net start winnat`
+を実行するか、`OPENUTAU_MCP_PORT` で別のポートにしてください。
+
 `skill/SKILL.md` を Claude のスキルフォルダー（例 `.claude/skills/openutau/SKILL.md`）に置くと、手順付きのワークフローが使えます。
+`skill/mix_stems.py` と `skill/scripts/` も同じフォルダーに置いてください。`mix_stems.py` は書き出した WAV ステムを
+揃えてミックスします。`scripts/` は伴奏トラックの解析（テンポ・拍・キー・コード、8小節の確認用 WAV）と伴奏上のミックス用で、
+librosa が必要です（SKILL.md 5b 参照）。
 
 ## 使い方
 

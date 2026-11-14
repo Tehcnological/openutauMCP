@@ -78,9 +78,14 @@ claude mcp add openutau -- "C:\path\to\openutau-mcp\.venv\Scripts\openutau-mcp.e
 Optional environment variables: `OPENUTAU_EXE` (path to OpenUtau.exe), `OPENUTAU_DATA_DIR` (default
 `Documents\OpenUtau`), `OPENUTAU_MCP_PORT` (default 51128; set the same variable for OpenUtau to move the plugin).
 
+Bridge not starting, with socket error 10013 in OpenUtau's log? Windows has reserved a port range that contains
+the port (check with `netsh interface ipv4 show excludedportrange protocol=tcp`). Run `net stop winnat` then
+`net start winnat` as administrator, or move the port with `OPENUTAU_MCP_PORT`.
+
 Optionally copy `skill/SKILL.md` into your Claude skills folder (e.g. `.claude/skills/openutau/SKILL.md`) for
-step-by-step workflows. `skill/mix_stems.py` (copy it next to `SKILL.md`) is the helper the skill uses to line up,
-level, pan and mix exported WAV stems into one stereo file.
+step-by-step workflows. Copy `skill/mix_stems.py` and `skill/scripts/` next to it: `mix_stems.py` lines up, levels,
+pans and mixes exported WAV stems into one stereo file; `scripts/` measures a backing track (tempo, beat, key,
+chords, an 8-bar check WAV) and mixes vocals over it, and needs librosa (see SKILL.md section 5b).
 
 ## Usage
 

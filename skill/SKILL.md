@@ -8,7 +8,8 @@ description: Make the best-sounding sung vocals in OpenUtau (English and Japanes
 Follow these rules every time. Defaults are starting points; the user's ear wins.
 If a `voicebanks.md` file sits next to this one, read it first: it lists the user's singers, phonemizers,
 voice colors, comfortable registers, per-bank findings and credit requirements. `mix_stems.py` (also next to this
-file) aligns, levels, pans and mixes WAV stems (section 14).
+file) aligns, levels, pans and mixes WAV stems (section 14). Singing over a backing track: section 5b (measure
+tempo/key/chords with `scripts\` first).
 
 Basics: 480 ticks = quarter note (1920 = 4/4 bar, 240 = 8th, 120 = 16th, 60 = 32nd). Note positions are relative
 to their part. Pitch: MIDI number or name, C4 = 60. "part" counts voice parts only. Every live edit is one undo step.
@@ -99,6 +100,45 @@ without being asked.
 - Minimum note length: 16th (120) below ~100 BPM, 32nd (60) at any tempo. Merge or re-rhythm anything shorter.
 - No overlapping notes and no zero/negative lengths.
 
+## 5b. Songs over a backing track: the song analysis tool / 伴奏に合わせた曲
+
+**Never guess tempo, beat, key or chords; measure them, and let the user confirm by ear before writing a note.**
+In a song session a guessed tempo (a 3:2 error, 168 instead of 112 BPM) ruined the first draft; the measured grid
+fixed it. Use only backing tracks the user has the right to sing over and remix.
+
+The scripts are in `scripts\` next to this file (`SCRIPTS` below). They need a Python venv with librosa (once:
+`python -m venv %LOCALAPPDATA%\song-analysis\venv`, then
+`%LOCALAPPDATA%\song-analysis\venv\Scripts\pip install librosa soundfile`); run them with
+`PY = %LOCALAPPDATA%\song-analysis\venv\Scripts\python -I`. ffmpeg must be on PATH.
+
+1. **Measure:** `PY SCRIPTS\analyze_backing.py TRACK.wav [--speed 1.25] --json facts.json` → tempo fitted to a
+   constant grid ("steady" = a fixed `set_tempo` will follow it), time of beat 1, key with confidence (r above
+   ~0.75 is clear), tuning offset, chord per bar, the repeating chord loop, loudness per bar. `--speed` gives the
+   numbers for the track sped up with pitch kept (`ffmpeg -af atempo=1.25`). `--table *.wav` = one tempo/key row
+   per file when the user is choosing a backing.
+2. **Confirm by ear:** `PY SCRIPTS\check8.py TRACK.wav facts.json check.wav [start_bar]` = 8 bars of backing +
+   click (high = beat 1) + the key's scale and tonic arpeggio. Send it; the user says "in time and in tune" in
+   seconds. Fix the analysis before writing anything.
+3. **Grid in OpenUtau:** `set_tempo(bpm)` with the measured value; 480 ticks/beat, so backing bar *b* starts at
+   `beat1_s + b * bar_s` and song tick = `(t_s - start_s) * bpm / 60 * 480`. Put song bar 0 on a measured bar
+   line where the chord loop starts. The MCP **cannot add audio (wave) parts**: render the vocals and lay them over
+   the backing in the mix (step 5), or ask the user to drag the backing WAV onto a track in OpenUtau. A simple
+   layout: voice part at bar 2 (2 bars of lead-in), backing cut from 2 bars before the song's first bar
+   (`ffmpeg -ss <start_s> -t <len> -i TRACK.wav -ar 44100 -ac 2 backing_seg.wav`), vocal stem at offset 0.
+4. **Write chorus first:** one 8-bar chorus over the loop; iterate with the user until they like the hook (A/B per
+   section 12), then the other sections one approved section at a time, each starting on the loop. Rules: section 7.
+5. **Stems and mix:** `export_wav(path, per_track=true)` (one WAV per track: lead, harmony, answer...), then
+   - `PY SCRIPTS\assemble.py out.wav LENGTH_S stem.wav@OFFSET_S ...` lays takes on the song timeline;
+   - optional per-stem ffmpeg (lead `highpass=f=120,deesser=i=0.4,acompressor=threshold=-22dB:ratio=2.5:attack=8:release=120:makeup=3`,
+     harmony `highpass=f=200,acompressor=threshold=-24dB:ratio=3:attack=8:release=120:makeup=3`);
+   - `PY SCRIPTS\mix.py backing.wav lead.wav harmony.wav out.wav BPM [answer.wav]`: stereo reverb (RT60 1.5 s),
+     1/8-note ping-pong delay, harmony widened and ~9 dB under the lead, answer right of centre, backing dip
+     around 2.5 kHz and ~3 dB ducking under the lead; the lead is level-matched to the backing +5 dB (RMS where
+     it sings; `VOX_DB` in the script). Any sample rate in (48 kHz renders are resampled), mono stems are fine,
+     output 44.1 kHz. No harmony: pass a silent WAV (`ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 1 silent.wav`);
+   - `ffmpeg -i out.wav -af loudnorm=I=-14:TP=-1.0 -ar 44100 final.wav`.
+   `mix_stems.py` stays the tool for a cappella ensembles (no backing, aligns a late stem, pans several voices).
+
 ## 6. Pitch and expression defaults / ピッチと表情
 
 - Portamento: keep OpenUtau's default short slide between notes. Bigger slides only for emotional moments.
@@ -115,7 +155,8 @@ without being asked.
 - Vibrato (`edit_notes` → `vibrato`): only on notes ≥ 1 beat (480); in practice on held notes of ≥ 2 beats in the
   middle of a phrase. Defaults: `length` 40–60 (starts partway in), `depth` 15–25 cents, `period` 170–200 ms,
   `in` 20, `out` 20. Never on short notes. Avoid it on the last held note of a phrase unless asked (users asked for
-  it removed there). `vibrato: {length: 0}` turns it off for a note.
+  it removed there in a cappella tests; over a backing track it won on long held hook notes, see section 7).
+  `vibrato: {length: 0}` turns it off for a note.
 - Phrase volume (`set_note_expression "vol"`, default 100): rise and fall across the phrase, e.g. peak 105–110 on
   the stressed words. `value=null` resets a note to default. A volume dip on the last note, a switch to a Soft voice
   color and a breathiness ramp at phrase ends all sounded odd on some DiffSinger voices: audition any soft ending
@@ -146,6 +187,21 @@ without being asked.
   change lyrics, not shape.
 - When the agent writes or adapts melody: mostly stepwise, occasional leaps, a leap followed by a step back in
   the other direction, phrase endings on stable notes.
+- **Songs over a backing (section 5b)**, each confirmed by ear in a song session:
+  - Sections start on the measured chord loop; long notes on chord tones of the bar, short passing steps only.
+  - Catchy hook = a short repeated phrase with a rest or syncopation; the second half repeats the first half's
+    rhythm; anticipate a held note by half a beat. A square 8th-note hook was "not catchy".
+  - Call-and-response from a second voice in 8th notes, in the hook's rhythm, inside the lead's held notes;
+    16th-note answers were "too fast".
+  - Harmony a third below, **chorus only**, ~12 dB under the lead. Never a same-voice harmony in the lead's range
+    under a verse: it blurred the words.
+  - Vowel-start words right after an "-ng" ("fading out") got lost on a low note: keep them off the bottom of the
+    singer's range, leave a ~60-tick gap after "-ng", and keep breathiness low on lines that must be understood.
+  - Expression: per-phrase `dyn` shaping (rise into the hook, ease off after) on every phrase. Vibrato depends on
+    the voice: a synth with its own vibrato sounded worse with manual vibrato on top, but a DiffSinger soprano
+    with almost none of its own (held notes wobbled ~12 cents peak-to-peak) won an A/B *with* manual vibrato on
+    the long held hook notes (length 55, depth 20, period 185, in/out 20; ~30 cents). Measure a bank's own wobble
+    first (section 13 pitch check), then A/B.
 
 ## 8. Safety and licensing / 安全とライセンス
 
