@@ -143,9 +143,47 @@ async def file_tests(c: Client, tmp: str) -> dict:
     n = (await c("ustx_list_notes", path=os.path.join(tmp, "utf8.ustx"), part=0))["notes"]
     ok(s["tempos"][0]["bpm"] == 90 and n == [{**n[0], "position": 480, "duration": 960, "tone": 62, "lyric": "うた"}],
        "UST import honours Charset= and skips rests", n)
+    tuned = os.path.join(tmp, "tuned.ust")
+    with open(tuned, "w", encoding="utf-8") as f:
+        f.write("[#VERSION]\nUST Version1.2\nCharset=UTF-8\n[#SETTING]\nTempo=120\n"
+                "[#0000]\nLength=480\nLyric=a\nNoteNum=60\n"
+                "[#0001]\nLength=960\nLyric=i\nNoteNum=62\nPBS=-50;-20\nPBW=60,100\nPBY=5,\nPBM=,s,r\n"
+                "VBR=65,180,35,20,30,0,0,0\n[#0002]\nLength=480\nLyric=R\nNoteNum=60\n"
+                "[#0003]\nLength=480\nLyric=u\nNoteNum=64\nPBS=-30\n[#TRACKEND]\n")
+    tx = os.path.join(tmp, "tuned.ustx")
+    await c("ust_import", ust_path=tuned, ustx_path=tx)
+    n = (await c("ustx_list_notes", path=tx, part=0))["notes"]
+    pts = [(p["x"], p["y"], p["shape"]) for p in n[1]["pitch"]["points"]]
+    ok(pts == [(-50, -20, "io"), (10, 5, "l"), (110, 0, "o")], "UST import keeps PBS/PBW/PBY/PBM", pts)
+    ok(n[1]["vibrato"] == {"length": 65, "period": 180, "depth": 35, "in": 20, "out": 30, "shift": 0, "drift": 0},
+       "UST import keeps VBR", n[1]["vibrato"])
+    ok([(p["x"], p["y"]) for p in n[2]["pitch"]["points"]] == [(-30, 0), (40, 0)] and n[0]["vibrato"]["length"] == 0,
+       "PBS alone moves the first point; no VBR = no vibrato", n[2])
+    ok([x["pitch"]["snap_first"] for x in n] == [False, True, False], "snap_first off after a rest", n)
+    if os.path.isfile(USTXCHECK):  # OpenUtau's own UST importer must give the same notes, pitch points and vibrato
+        seen = [[ln for ln in subprocess.run([USTXCHECK, f], capture_output=True, text=True, encoding="utf-8")
+                 .stdout.splitlines() if ln.startswith("    ")] for f in (tuned, tx)]
+        ok(seen[0] and seen[0] == seen[1], "UST import matches OpenUtau's importer", seen)
+    tuned2 = os.path.join(tmp, "tuned2.ust")
+    await c("ust_export", ustx_path=tx, ust_path=tuned2, encoding="utf-8")
+    raw = open(tuned2, encoding="utf-8").read()
+    ok("PBS=-50;-20" in raw and "PBW=60,100" in raw and "PBM=,s,r" in raw and "VBR=65,180,35,20,30,0,0" in raw,
+       "UST export writes PBS/PBW/PBY/PBM and VBR", raw)
+    await c("ust_import", ust_path=tuned2, ustx_path=os.path.join(tmp, "tuned2.ustx"))
+    n2 = (await c("ustx_list_notes", path=os.path.join(tmp, "tuned2.ustx"), part=0))["notes"]
+    ok([(x["pitch"], x["vibrato"]) for x in n2] == [(x["pitch"], x["vibrato"]) for x in n], "UST tuning round trip", n2)
+    await c("ustx_edit_notes", path=tx, part=0, edits=[{"index": 1, "phoneme_overrides": [
+        {"index": 0, "offset": -30, "preutter_delta": 12.5}, {"index": 1, "overlap_delta": 5}]}])
+    ov = (await c("ustx_list_notes", path=tx, part=0))["notes"][1]["phoneme_overrides"]
+    ok(ov == [{"index": 0, "offset": -30, "preutter_delta": 12.5}, {"index": 1, "overlap_delta": 5.0}],
+       "edit phoneme overrides", ov)
+    await c("ustx_edit_notes", path=tx, part=0, edits=[{"index": 1, "phoneme_overrides": [
+        {"index": 0, "offset": 0, "preutter_delta": 0}]}])
+    ov = (await c("ustx_list_notes", path=tx, part=0))["notes"][1]["phoneme_overrides"]
+    ok(ov == [{"index": 1, "overlap_delta": 5.0}], "0 clears a phoneme override", ov)
 
     if os.path.isfile(USTXCHECK):
-        out = subprocess.run([USTXCHECK, path, back], capture_output=True, text=True, encoding="utf-8")
+        out = subprocess.run([USTXCHECK, path, back, tx], capture_output=True, text=True, encoding="utf-8")
         ok(out.returncode == 0, "OpenUtau.Core loads the written .ustx files", out.stdout + out.stderr)
     else:
         print("  skip  OpenUtau.Core loader check (build tools/ustxcheck to enable)")
@@ -199,6 +237,10 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
         ph = await c("list_phonemes", part=part)
         ok(ph["phonemes"] and all("has_oto" in x for x in ph["phonemes"]), f"phonemes listed for part {part}")
         print(f"  part {part}: {sum(x['has_oto'] for x in ph['phonemes'])}/{len(ph['phonemes'])} phonemes have samples")
+    await c("edit_notes", part=0, edits=[{"index": 1, "phoneme_overrides": [{"index": 0, "offset": -20}]}])
+    ov = (await c("list_notes", part=0))["notes"][1]["phoneme_overrides"]
+    ok(ov and ov[0]["index"] == 0 and ov[0]["offset"] == -20, "phoneme offset override", ov)
+    await c("undo")
 
     print("[live: expression + undo]")
     await c("set_note_expression", part=0, abbr="vel", value=150, indices=[0, 1])

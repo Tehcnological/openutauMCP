@@ -1,8 +1,9 @@
-// Dev tool: load .ustx files with OpenUtau.Core's own loader and print what it sees,
+// Dev tool: load .ustx (or .ust, through OpenUtau's UST importer) files with OpenUtau.Core's own loader and print what it sees,
 // or write a reference project ("--sample out.ustx"). Not shipped.
 using System;
 using System.Linq;
 using OpenUtau.Core;
+using OpenUtau.Classic;
 using OpenUtau.Core.Format;
 using OpenUtau.Core.Ustx;
 
@@ -11,6 +12,7 @@ System.Runtime.Loader.AssemblyLoadContext.Default.Resolving += (ctx, name) => {
     var f = System.IO.Path.Combine(ouDir, name.Name + ".dll");
     return System.IO.File.Exists(f) ? ctx.LoadFromAssemblyPath(f) : null;
 };
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 return Run(args);
 
 static int Run(string[] args) {
@@ -31,12 +33,12 @@ if (args.Length == 2 && args[0] == "--sample") {
 int rc = 0;
 foreach (var f in args) {
     try {
-        var p = Ustx.Load(f);
+        var p = f.EndsWith(".ust", StringComparison.OrdinalIgnoreCase) ? Ust.Load(new[] { f }) : Ustx.Load(f);
         Console.WriteLine($"OK {f}: tempos={string.Join(",", p.tempos)} tracks={p.tracks.Count} parts={p.parts.Count}");
         foreach (var t in p.tracks) Console.WriteLine($"  track {t.TrackNo} singer={t.singer} phonemizer={t.phonemizer}");
         foreach (var part in p.parts.OfType<UVoicePart>()) {
             Console.WriteLine($"  part {part.name} track={part.trackNo} pos={part.position} dur={part.Duration} notes={part.notes.Count}");
-            foreach (var n in part.notes) Console.WriteLine($"    {n.position} {n.duration} {n.tone} '{n.lyric}' pitch={n.pitch.data.Count} vib={n.vibrato.length}");
+            foreach (var n in part.notes) Console.WriteLine($"    {n.position} {n.duration} {n.tone} '{n.lyric}' snap={n.pitch.snapFirst} pitch={string.Join(" ", n.pitch.data.Select(d => $"{d.X};{d.Y};{d.shape}"))} vib={n.vibrato.length},{n.vibrato.period},{n.vibrato.depth},{n.vibrato.@in},{n.vibrato.@out},{n.vibrato.shift},{n.vibrato.drift} ov={n.phonemeOverrides.Count}");
         }
     } catch (Exception e) {
         Console.WriteLine($"FAIL {f}: {e}");

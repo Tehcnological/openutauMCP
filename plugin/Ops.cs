@@ -568,6 +568,10 @@ namespace OpenUtauMcp.Plugin {
             // Only values set on the note (defaults are omitted). index = phoneme index within the note.
             expressions = n.phonemeExpressions.Select(e => new { abbr = e.abbr, index = e.index, value = e.value }).ToList(),
             pitch = new { snap_first = n.pitch.snapFirst, points = n.pitch.data.Select(p => new { x = p.X, y = p.Y, shape = p.shape.ToString() }) },
+            // index = phoneme index within the note; offset in ticks, deltas in ms.
+            phoneme_overrides = n.phonemeOverrides.Where(o => !o.IsEmpty).Select(o => new {
+                index = o.index, phoneme = o.phoneme, offset = o.offset, preutter_delta = o.preutterDelta, overlap_delta = o.overlapDelta,
+            }).ToList(),
         };
 
         // ---------- pitch points & curves ----------
@@ -696,6 +700,19 @@ namespace OpenUtauMcp.Plugin {
                     Vib("shift", x => new VibratoShiftCommand(part, note, x));
                     Vib("drift", x => new VibratoDriftCommand(part, note, x));
                 }
+                foreach (var ov in o["phoneme_overrides"]?.AsArray() ?? new JsonArray()) {
+                    var po = ov as JsonObject ?? throw new ArgumentException("Each phoneme override must be an object");
+                    int idx = Int(po, "index");
+                    int? offset = OptInt(po, "offset");
+                    if (offset != null) Doc.ExecuteCmd(new PhonemeOffsetCommand(part, note, idx, offset.Value));
+                    double? pre = OptNum(po, "preutter_delta"), ovl = OptNum(po, "overlap_delta");
+                    if (pre == null && ovl == null) continue;
+                    // OpenUtau clamps these deltas against the rendered phoneme, so it must exist.
+                    var ph = part.phonemes.FirstOrDefault(p => p.Parent == note && p.index == idx)
+                        ?? throw new ArgumentException($"Phoneme {idx} of the note is not ready (call list_phonemes first)");
+                    if (pre != null) Doc.ExecuteCmd(new PhonemePreutterCommand(part, note, idx, ph, (float)pre.Value));
+                    if (ovl != null) Doc.ExecuteCmd(new PhonemeOverlapCommand(part, note, idx, ph, (float)ovl.Value));
+                }
             }
             int end = part.notes.Count == 0 ? 0 : part.notes.Max(n => n.End);
             if (end > part.Duration) {
@@ -766,8 +783,11 @@ namespace OpenUtauMcp.Plugin {
                         lyric = ph.Parent?.lyric,
                         position = ph.position,
                         duration = ph.Duration,
+                        index = ph.index,
                         phoneme = ph.phoneme,
                         alias = ph.phonemeMapped,
+                        preutter = ph.preutter,
+                        overlap = ph.overlap,
                         has_oto = ph.oto != null,
                     }).ToList(),
                 };

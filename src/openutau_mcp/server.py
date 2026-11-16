@@ -84,6 +84,13 @@ class Vibrato(BaseModel):
                                   "out": self.out, "shift": self.shift, "drift": self.drift}.items() if v is not None}
 
 
+class PhonemeOverride(BaseModel):
+    index: int = Field(description="Phoneme index within the note (0 = first; see list_phonemes). / 音符内の音素番号")
+    offset: int | None = Field(None, description="Move the phoneme start by ticks (- = earlier; 0 clears). / 音素の開始をティックでずらす（負で早く、0 で解除）")
+    preutter_delta: float | None = Field(None, description="Preutterance change in ms (0 clears). / 先行発声の増減（ミリ秒、0 で解除）")
+    overlap_delta: float | None = Field(None, description="Overlap change in ms (0 clears). / オーバーラップの増減（ミリ秒、0 で解除）")
+
+
 class NoteEdit(BaseModel):
     index: int = Field(description="Note index in the part. / パート内の音符番号")
     position: int | None = Field(None, description="New start tick. / 新しい開始ティック")
@@ -92,6 +99,8 @@ class NoteEdit(BaseModel):
     lyric: str | None = Field(None, description="New lyric. / 新しい歌詞")
     tuning: int | None = Field(None, description="Fine tuning in cents. / 微調整（セント）")
     vibrato: Vibrato | None = Field(None, description="Vibrato fields to change. / 変更するビブラート項目")
+    phoneme_overrides: list[PhonemeOverride] | None = Field(
+        None, description="Phoneme timing per phoneme of the note. / 音符内の音素ごとのタイミング")
 
 
 def _notes_payload(notes: list[NoteIn]) -> list[dict]:
@@ -108,6 +117,8 @@ def _edit_payload(e: NoteEdit) -> dict:
         d["tone"] = music.to_midi(e.tone)
     if e.vibrato is not None:
         d["vibrato"] = e.vibrato.values()
+    if e.phoneme_overrides:
+        d["phoneme_overrides"] = [o.model_dump(exclude_none=True) for o in e.phoneme_overrides]
     return d
 
 
@@ -334,8 +345,8 @@ def remove_part(part: int) -> dict:
 
 @_tool()
 def list_notes(part: int) -> dict:
-    """Notes of a voice part: index, position, duration, tone, lyric, tuning, vibrato.
-    / ボイスパートの音符一覧（番号、位置、長さ、音高、歌詞、微調整、ビブラート）。"""
+    """Notes of a voice part: index, position, duration, tone, lyric, tuning, vibrato, pitch points, phoneme overrides.
+    / ボイスパートの音符一覧（番号、位置、長さ、音高、歌詞、微調整、ビブラート、ピッチ点、音素の上書き）。"""
     return bridge.call("notes.list", part=part)
 
 
@@ -348,8 +359,9 @@ def add_notes(part: int, notes: list[NoteIn]) -> dict:
 
 @_tool()
 def edit_notes(part: int, edits: list[NoteEdit]) -> dict:
-    """Edit notes in place by index (position, duration, tone, lyric, tuning, vibrato); pitch curves are kept.
-    / 番号で指定した音符をその場で編集します（位置・長さ・音高・歌詞・微調整・ビブラート）。ピッチ曲線は保持されます。"""
+    """Edit notes in place by index (position, duration, tone, lyric, tuning, vibrato, phoneme_overrides = phoneme
+    offset/preutter/overlap); pitch curves are kept. OpenUtau clamps preutter/overlap deltas to what the sample allows.
+    / 番号で指定した音符をその場で編集します（位置・長さ・音高・歌詞・微調整・ビブラート・音素のタイミング）。ピッチ曲線は保持されます。"""
     return bridge.call("notes.edit", part=part, edits=[_edit_payload(e) for e in edits])
 
 
@@ -422,8 +434,8 @@ def refresh_singers() -> list:
 
 @_tool()
 def list_phonemes(part: int) -> dict:
-    """Phonemes OpenUtau produced for a part (note index, lyric, position, duration, phoneme, has_oto).
-    Use it to check pronunciation. / パートについて OpenUtau が生成した音素一覧。発音の確認に使います。"""
+    """Phonemes OpenUtau produced for a part (note index, phoneme index in the note, lyric, position, duration,
+    phoneme, preutter/overlap in ms, has_oto). Use it to check pronunciation and before phoneme_overrides edits. / パートについて OpenUtau が生成した音素一覧。発音の確認に使います。"""
     return bridge.call("phonemes.list", part=part)
 
 
@@ -627,7 +639,7 @@ def ustx_list_notes(path: str, part: int) -> dict:
 
 @_tool()
 def ustx_edit_notes(path: str, part: int, edits: list[NoteEdit]) -> dict:
-    """Edit notes by index in a .ustx file (position, duration, tone, lyric, tuning, vibrato).
+    """Edit notes by index in a .ustx file (position, duration, tone, lyric, tuning, vibrato, phoneme_overrides).
     / .ustx ファイルの音符を番号で編集します。"""
     path = os.path.abspath(path)
 
@@ -716,8 +728,10 @@ def ustx_fit_part(path: str, part: int) -> dict:
 @_tool()
 def ust_import(ust_path: str, ustx_path: str, singer: str | None = None, phonemizer: str | None = None,
                overwrite: bool = False) -> dict:
-    """Convert a classic UTAU .ust (Shift_JIS unless Charset= says otherwise) into a new .ustx file.
-    / UTAU の .ust（既定は Shift_JIS、Charset= 行があれば従う）を新しい .ustx に変換します。"""
+    """Convert a classic UTAU .ust (Shift_JIS unless Charset= says otherwise) into a new .ustx file, keeping each
+    note's vibrato (VBR) and Mode2 portamento (PBS/PBW/PBY/PBM). Import the .ust itself: a MIDI made from it has lost them.
+    / UTAU の .ust（既定は Shift_JIS、Charset= 行があれば従う）を新しい .ustx に変換します。ビブラート（VBR）と
+    Mode2 のピッチ（PBS/PBW/PBY/PBM）も引き継ぎます。MIDI に変換したものではなく .ust を直接読み込んでください。"""
     ustx_path = os.path.abspath(ustx_path)
     if os.path.exists(ustx_path) and not overwrite:
         raise OpenUtauError(f"{ustx_path} exists; pass overwrite=true", f"{ustx_path} は既に存在します。overwrite=true を指定してください")
@@ -729,8 +743,9 @@ def ust_import(ust_path: str, ustx_path: str, singer: str | None = None, phonemi
 
 @_tool()
 def ust_export(ustx_path: str, ust_path: str, part: int = 0, encoding: str = "shift_jis") -> dict:
-    """Export one voice part of a .ustx as a classic .ust (gaps become R rests; Shift_JIS by default).
-    / .ustx のボイスパートを UTAU の .ust に書き出します（隙間は休符 R、既定は Shift_JIS）。"""
+    """Export one voice part of a .ustx as a classic .ust (gaps become R rests; Shift_JIS by default), with each
+    note's pitch points (PBS/PBW/PBY/PBM) and vibrato (VBR).
+    / .ustx のボイスパートを UTAU の .ust に書き出します（隙間は休符 R、既定は Shift_JIS。ピッチ点とビブラートも書き出し）。"""
     project = ustx.load(os.path.abspath(ustx_path))
     vp = ustx.voice_part(project, part)
     blocks = ust.write(os.path.abspath(ust_path), vp["notes"], project["tempos"][0]["bpm"],

@@ -205,12 +205,40 @@ def edit_note(note: dict, edit: dict) -> None:
         note["tuning"] = int(edit["tuning"])
     if edit.get("vibrato"):
         set_vibrato(note, **{k: edit["vibrato"].get(k) for k in VIBRATO_KEYS})
+    for o in edit.get("phoneme_overrides") or []:
+        set_phoneme_override(note, o)
+
+
+OVERRIDE_KEYS = ("offset", "preutter_delta", "overlap_delta")
+
+
+def set_phoneme_override(note: dict, values: dict) -> None:
+    """values: index (phoneme in the note) + offset (ticks) / preutter_delta / overlap_delta (ms). 0 clears a field,
+    like OpenUtau. Unlike the editor, deltas are not clamped to the sample here; OpenUtau limits them when it renders."""
+    overrides = note.setdefault("phoneme_overrides", [])
+    o = next((x for x in overrides if x.get("index") == int(values["index"])), None)
+    if o is None:
+        o = {"index": int(values["index"])}
+        overrides.append(o)
+    for k in OVERRIDE_KEYS:
+        v = values.get(k)
+        if v is None:
+            continue
+        if v == 0:
+            o.pop(k, None)
+        else:
+            o[k] = int(v) if k == "offset" else float(v)
+    if len(o) == 1:  # only the index left
+        overrides.remove(o)
 
 
 def note_info(i: int, n: dict) -> dict:
     return {"index": i, "position": n["position"], "duration": n["duration"], "tone": n["tone"],
             "lyric": n.get("lyric", ""), "tuning": n.get("tuning", 0),
-            "vibrato": {k: (n.get("vibrato") or default_vibrato()).get(k) for k in VIBRATO_KEYS}}
+            "vibrato": {k: (n.get("vibrato") or default_vibrato()).get(k) for k in VIBRATO_KEYS},
+            "pitch": {"snap_first": (n.get("pitch") or {}).get("snap_first", True),
+                      "points": (n.get("pitch") or {}).get("data") or []},
+            "phoneme_overrides": n.get("phoneme_overrides") or []}
 
 
 def summary(project: dict, path: str | None = None) -> dict:

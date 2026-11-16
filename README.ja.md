@@ -85,7 +85,8 @@ claude mcp add openutau -- "C:\path\to\openutau-mcp\.venv\Scripts\openutau-mcp.e
 `skill/SKILL.md` を Claude のスキルフォルダー（例 `.claude/skills/openutau/SKILL.md`）に置くと、手順付きのワークフローが使えます。
 `skill/mix_stems.py` と `skill/scripts/` も同じフォルダーに置いてください。`mix_stems.py` は書き出した WAV ステムを
 揃えてミックスします。`scripts/` は伴奏トラックの解析（テンポ・拍・キー・コード、8小節の確認用 WAV）と伴奏上のミックス用で、
-librosa が必要です（SKILL.md 5b 参照）。
+librosa が必要です（SKILL.md 5b 参照）。`scripts/reference_check.py` はカバー曲を原曲と比べます（1〜2.5 半音ずれて
+歌われている音符、歌手が早めに切る長い音、セクションごとのボーカルと伴奏の音量差、ラウドネス。Demucs は任意）。
 
 ## 使い方
 
@@ -120,14 +121,14 @@ Claude にこう頼みます。
 - **アプリ**：`openutau_status`、`launch_openutau`、`close_openutau`
 - **ライブ（ブリッジ経由）**：プロジェクト（`get_project`、`new_project`、`open_project`、`save_project`、
   `import_tracks`、`undo`、`redo`）、テンポ・拍子・キー、一覧（`list_singers`、`list_phonemizers`、
-  `list_expressions`）、トラック、パート、音符（`list_notes`、`add_notes`、`edit_notes`、`replace_lyrics`、
+  `list_expressions`）、トラック、パート、音符（`list_notes`、`add_notes`、`edit_notes`（音素タイミングの上書きも可）、`replace_lyrics`、
   `delete_notes`、`set_note_expression`）、歌詞（`assign_lyrics`、`set_lyrics`）、メロディと歌詞を一度に（`add_melody`、例 `A4:1 A4:1 B4:2 r:1`）、
   `fit_part`（パートを音符に合わせて伸縮）、`rank_phonemizers`（歌手に最適な音素化器）、ピッチ曲線（`set_pitch`）、
   表情カーブ（`get_curve`、`set_curve`、`clear_curve`）、`refresh_singers`、`list_phonemes`、
-  再生（`play`、`pause`、`stop`、`seek`）、書き出し（`export_wav`、`export_midi`）
+  再生（`play`、`pause`、`stop`、`seek`）、書き出し（`export_midi`、`export_wav`：OpenUtau の出力どおり 44.1 kHz 16 bit の WAV、ビット深度は選べません）
 - **ファイル（OpenUtau を閉じたままで可）**：`ustx_create`、`ustx_summary`、`ustx_set_tempo`、`ustx_add_track`、
   `ustx_set_track_singer`、`ustx_add_voice_part`、`ustx_add_notes`、`ustx_list_notes`、`ustx_edit_notes`、
-  `ustx_delete_notes`、`ustx_set_vibrato`、`ustx_assign_lyrics`、`ustx_add_melody`、`ustx_fit_part`、`ust_import`、`ust_export`
+  `ustx_delete_notes`、`ustx_set_vibrato`、`ustx_assign_lyrics`、`ustx_add_melody`、`ustx_fit_part`、`ust_import` / `ust_export`（音符ごとの VBR ビブラートと PBS/PBW/PBY/PBM ピッチを保持）
 - **音源**：`list_voicebanks`、`get_voicebank`、`search_oto`
 - **ユーティリティ**：`note_to_midi`、`midi_to_note`、`beats_to_ticks`、`ticks_to_beats`、`split_lyrics`
 

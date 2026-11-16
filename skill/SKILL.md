@@ -99,6 +99,18 @@ without being asked.
   Never run phrases back-to-back. The gap is also where breaths go.
 - Minimum note length: 16th (120) below ~100 BPM, 32nd (60) at any tempo. Merge or re-rhythm anything shorter.
 - No overlapping notes and no zero/negative lengths.
+- A fan-made UST: `ust_import` the .ust itself. It keeps each note's vibrato (VBR) and portamento
+  (PBS/PBW/PBY/PBM) exactly as OpenUtau's own importer does; a MIDI made from the UST keeps only notes and lyrics.
+- Imported UST/MIDI: a short rest inside a word may be a dropped melisma (the vowel moving to a new pitch), not a
+  pause. Compare with the original recording (`reference_check.py notes`, section 5b) and fill the gap with a `+`
+  note at the new pitch; do not just lengthen the note. A melisma can dip below the note as well as rise.
+- Long held notes at phrase ends: singers usually release them after 55-70 % of the written length and breathe.
+  A synth that holds every long note to full length sounds strained: shorten those notes (with the original as
+  the guide when there is one).
+- Phoneme timing by hand (`edit_notes` / `ustx_edit_notes` → `phoneme_overrides: [{index, offset, preutter_delta,
+  overlap_delta}]`): `index` = phoneme within the note (from `list_phonemes`), `offset` in ticks (-30 = consonant
+  30 ticks earlier), deltas in ms; 0 clears, `list_notes` shows them. OpenUtau clamps preutter/overlap to what the
+  sample allows. Use it on single notes the user points at, not copied wholesale from a recording.
 
 ## 5b. Songs over a backing track: the song analysis tool / 伴奏に合わせた曲
 
@@ -138,6 +150,20 @@ The scripts are in `scripts\` next to this file (`SCRIPTS` below). They need a P
      output 44.1 kHz. No harmony: pass a silent WAV (`ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 1 silent.wav`);
    - `ffmpeg -i out.wav -af loudnorm=I=-14:TP=-1.0 -ar 44100 final.wav`.
    `mix_stems.py` stays the tool for a cappella ensembles (no backing, aligns a late stem, pans several voices).
+6. **Covers: check against the original first.** When the project covers an existing recording, run
+   `reference_check.py` before more tuning (extra once: `pip install pyyaml mido` in the same venv; Demucs, if
+   used, lives in its own venv: `python -m venv %LOCALAPPDATA%\demucs\venv`, then `pip install demucs` there).
+   `--offset` = seconds into the original where project tick 0 falls.
+   - `PY SCRIPTS\reference_check.py notes ORIGINAL.wav --ustx song.ustx [--part 0] --offset S` separates the
+     original's vocal (Demucs `--two-stems vocals -n htdemucs`, cached in `separated\` next to it; or pass
+     `--ref-vocal`), then lists notes the singer sings a steady 1-2.5 semitones off the written note (dropped
+     melismas, wrong transcriptions) and long notes (≥ dotted 8th) the singer releases before 80 %. `--midi` works
+     instead of `--ustx`.
+   - `... balance ORIGINAL.wav --vocal lead.wav --backing backing.wav --ustx song.ustx --offset S
+     [--sections verse:1-8,chorus:9-16]`: vocal-minus-backing level per section, render vs original. A synth lead
+     often sits 5-9 dB louder than the original singer did: turn it down before reaching for more tuning.
+   - `... loudness mix.wav [--normalize listen.wav]`: integrated LUFS and true peak; writes a -14 LUFS / -1 dBTP
+     listening copy. `--self-check` tests the script's own logic.
 
 ## 6. Pitch and expression defaults / ピッチと表情
 
@@ -175,6 +201,10 @@ The scripts are in `scripts\` next to this file (`SCRIPTS` below). They need a P
 - "More emotion" for a DiffSinger voice that sounds flat is mostly: `vol` peaks on stressed words (105), a gentle
   `dyn` swell across each phrase, vibrato on mid-phrase held notes, and small `brec` under soft passages. Apply it
   per track, then re-listen or A/B before adding more.
+- Do not copy a human singer's pitch curve note by note onto a bank that already moves pitch by itself
+  (DiffSinger): it sounded strained, not more human, in a cover session. Prefer song-wide changes (note releases,
+  verse/chorus contrast, vibrato on held notes, mix balance) and hand-tune only the notes the user points at.
+  Plain UTAU banks hold a flat pitch, so a reference curve might help there: untested, say so if you try it.
 - New voicebank installed while OpenUtau is open: `refresh_singers` instead of restarting.
 - Range: use the range in the bank's readme / `voicebanks.md`. Unknown: flag any note far outside the rest of the
   melody (more than ~an octave from its middle) and ask before keeping it.
@@ -262,7 +292,8 @@ Observed on OpenUtau 0.1.576 with this MCP server:
 - `export_wav(path, per_track=true)` writes `<path-stem>_<trackname>.wav` for **every** track each time, so name
   tracks in lower case to get predictable files (`line_lem.wav`). `per_track=false` writes one mixdown. Per-track
   export temporarily mutes the other tracks and may leave them muted in the live project: re-check `mute` before
-  building on it. Output was 44.1 kHz mono 16-bit for DiffSinger and classic banks alike.
+  building on it. Output was 44.1 kHz mono 16-bit for DiffSinger and classic banks alike (per-track; the mixdown is
+  stereo). OpenUtau always writes 16-bit: there is no bit-depth option.
 - `set_note_expression(value=null)` resets; `clear_curve` resets a curve; `edit_notes(vibrato={length:0})` turns
   vibrato off; `set_pitch(..., [{x:-40,y:0},{x:40,y:0}], snap_first=true)` restores the default slide. `edit_notes`
   takes several notes per call (e.g. re-pitch a whole 20-note part in one call), and `tone` is an absolute MIDI number.
@@ -306,6 +337,10 @@ Never claim a render "sounds good". You can verify, and should state exactly wha
 - Confirm two renders are identical (or different) with `Get-FileHash -Algorithm MD5`.
 - Loudness differs a lot between banks (peaks from ~0.2 to ~0.8 were seen): report it, and match levels (RMS) before
   an A/B or a mix.
+- When a change is meant to fix something, render a stem and measure before and after (pitch, level, timing), not
+  only by ear.
+- Listening notes from another AI (or a summary of an earlier session) can credit changes that were never made.
+  Check the claim against the project file (`list_notes`, `get_curve`) before building on it.
 - Reference renders from other tools can disappear between turns. Regenerate from the saved source (if the tool is
   deterministic) instead of hunting for the old file.
 

@@ -86,6 +86,8 @@ Optionally copy `skill/SKILL.md` into your Claude skills folder (e.g. `.claude/s
 step-by-step workflows. Copy `skill/mix_stems.py` and `skill/scripts/` next to it: `mix_stems.py` lines up, levels,
 pans and mixes exported WAV stems into one stereo file; `scripts/` measures a backing track (tempo, beat, key,
 chords, an 8-bar check WAV) and mixes vocals over it, and needs librosa (see SKILL.md section 5b).
+`scripts/reference_check.py` compares a cover with the original recording: notes the singer sings 1-2.5 semitones
+off, long notes the singer releases early, vocal-vs-backing balance per section, and loudness (Demucs optional).
 
 ## Usage
 
@@ -121,14 +123,15 @@ undo step in OpenUtau.
 - **App**: `openutau_status`, `launch_openutau`, `close_openutau`
 - **Live (bridge)**: project (`get_project`, `new_project`, `open_project`, `save_project`, `import_tracks`, `undo`,
   `redo`), tempo/time signature/key, catalog (`list_singers`, `list_phonemizers`, `list_expressions`), tracks,
-  parts, notes (`list_notes`, `add_notes`, `edit_notes`, `replace_lyrics`, `delete_notes`, `set_note_expression`),
+  parts, notes (`list_notes`, `add_notes`, `edit_notes` incl. phoneme timing overrides, `replace_lyrics`,
+  `delete_notes`, `set_note_expression`),
   lyrics (`assign_lyrics`, `set_lyrics`), melody + lyrics in one call (`add_melody`, e.g. `A4:1 A4:1 B4:2 r:1`),
   `fit_part` (shrink/grow a part to its notes), `rank_phonemizers` (best phonemizer for a singer), pitch curves
   (`set_pitch`), expression curves (`get_curve`, `set_curve`, `clear_curve`), `refresh_singers`, `list_phonemes`, playback (`play`, `pause`, `stop`, `seek`),
-  export (`export_wav`, `export_midi`)
+  export (`export_midi`; `export_wav` writes 44.1 kHz 16-bit WAV as OpenUtau renders it, with no bit-depth option)
 - **Files (OpenUtau may be closed)**: `ustx_create`, `ustx_summary`, `ustx_set_tempo`, `ustx_add_track`,
   `ustx_set_track_singer`, `ustx_add_voice_part`, `ustx_add_notes`, `ustx_list_notes`, `ustx_edit_notes`,
-  `ustx_delete_notes`, `ustx_set_vibrato`, `ustx_assign_lyrics`, `ustx_add_melody`, `ustx_fit_part`, `ust_import`, `ust_export`
+  `ustx_delete_notes`, `ustx_set_vibrato`, `ustx_assign_lyrics`, `ustx_add_melody`, `ustx_fit_part`, `ust_import` / `ust_export` (keep each note's VBR vibrato and PBS/PBW/PBY/PBM portamento)
 - **Voicebanks**: `list_voicebanks`, `get_voicebank`, `search_oto`
 - **Utilities**: `note_to_midi`, `midi_to_note`, `beats_to_ticks`, `ticks_to_beats`, `split_lyrics`
 
