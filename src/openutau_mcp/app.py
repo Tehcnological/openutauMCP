@@ -10,9 +10,9 @@ from . import bridge, voicebanks
 from .errors import OpenUtauError
 
 
-def known_dir(env: str, reg_value: str) -> str | None:
-    """A Windows folder from its environment variable, else from the registry: MCP clients often start servers
-    with a short environment that has no ProgramFiles."""
+def known_dir(env: str, reg_value: str, default: str) -> str:
+    """A Windows folder from its environment variable, else the registry, else <SystemDrive>\\default: MCP clients
+    often start servers with a short environment that has no ProgramFiles."""
     if os.environ.get(env):
         return os.environ[env]
     try:
@@ -20,12 +20,13 @@ def known_dir(env: str, reg_value: str) -> str | None:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion") as k:
             return winreg.QueryValueEx(k, reg_value)[0]
     except (ImportError, OSError):
-        return None
+        return os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, default)
 
 
 def find_exe() -> str | None:
     candidates = [os.environ.get("OPENUTAU_EXE")]
-    for base in (known_dir("ProgramFiles", "ProgramFilesDir"), known_dir("ProgramFiles(x86)", "ProgramFilesDir (x86)"),
+    for base in (known_dir("ProgramFiles", "ProgramFilesDir", "Program Files"),
+                 known_dir("ProgramFiles(x86)", "ProgramFilesDir (x86)", "Program Files (x86)"),
                  os.environ.get("LOCALAPPDATA")):
         if base:
             candidates.append(os.path.join(base, "OpenUtau", "OpenUtau.exe"))
@@ -103,9 +104,11 @@ def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]
                                 "MCP_SPAWN_HIDE": "1" if wrap else ""},
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=20)
         started = r.returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        started = None  # WMI may still be creating it: wait longer before trying another way
+    except OSError:
         started = False
-    for _ in range(10 if started else 5):  # WMI may report success for cmd whose `start` then failed, or be slow
+    for _ in range(10 if started else 30 if started is None else 5):  # WMI may report success for cmd whose `start` then failed, or be slow
         if processes():
             return warnings
         time.sleep(1)
@@ -131,8 +134,10 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
             "OpenUtau.exe not found; set the OPENUTAU_EXE environment variable",
             "OpenUtau.exe が見つかりません。環境変数 OPENUTAU_EXE を設定してください",
         )
-    # a path with % cannot go through cmd (it would expand %NAME%): open it through the bridge once it is up
-    later = project_path if project_path and "%" in project_path else None
+    # with OPENUTAU_* settings to pass, spawn starts OpenUtau through cmd, which would expand %NAME% in a path:
+    # such a path is opened through the bridge once it is up instead
+    via_cmd = any(k.upper().startswith("OPENUTAU") for k in os.environ)
+    later = project_path if project_path and via_cmd and "%" in project_path else None
     warnings = spawn([exe] + ([project_path] if project_path and not later else []), os.path.dirname(exe),
                      env_prefix="OPENUTAU")
     deadline = time.time() + wait_seconds
@@ -145,6 +150,10 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
         out["warnings"] = warnings
     if later and bridge.reachable():
         out.update(opened=later, summary=bridge.call("project.open", path=later))
+    elif later:
+        out.setdefault("warnings", []).append(
+            f"{later} was not opened: the bridge did not answer. Open it with open_project once it does. / "
+            f"ブリッジが応答しないため {later} を開いていません。応答したら open_project で開いてください。")
     return {**out, **status()}
 
 

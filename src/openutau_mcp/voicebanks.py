@@ -46,14 +46,18 @@ def plugins_dir() -> str:
 def _documents() -> str:
     try:
         import winreg
-        # "Shell Folders" holds the path already expanded, so it works when the client did not pass USERPROFILE
-        for key in ("Shell Folders", "User Shell Folders"):
+    except ImportError:
+        return os.path.join(os.path.expanduser("~"), "Documents")
+    # "Shell Folders" holds the path already expanded, so it works when the client did not pass USERPROFILE;
+    # it can lack the value, so "User Shell Folders" is tried next
+    for key in ("Shell Folders", "User Shell Folders"):
+        try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\" + key) as k:
                 path = winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(k, "Personal")[0])
-            if "%" not in path:
-                return path
-    except (ImportError, OSError):
-        pass
+        except OSError:
+            continue
+        if "%" not in path:
+            return path
     return os.path.join(os.path.expanduser("~"), "Documents")
 
 

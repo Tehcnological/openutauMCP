@@ -151,6 +151,9 @@ _GUIDE_NOTE = ("\n\n---\nNote for agents without the skill: files this guide men
                "Skip the steps that need them if they are not available.\n")
 
 
+FRONT_MATTER = re.compile(r"\A---[ \t]*\r?\n(?:.*?\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)  # empty or at end of file too
+
+
 def _guide_text() -> str:
     """skill/SKILL.md without its front matter (bundled next to this file in wheels and the single-file build)."""
     here = os.path.dirname(os.path.abspath(__file__))
@@ -158,7 +161,7 @@ def _guide_text() -> str:
         if os.path.isfile(p):
             with open(p, encoding="utf-8") as f:
                 text = f.read()
-            return re.sub(r"\A---\r?\n.*?\r?\n---[ \t]*\r?\n", "", text, count=1, flags=re.S).lstrip() + _GUIDE_NOTE
+            return re.sub(FRONT_MATTER, "", text, count=1).lstrip() + _GUIDE_NOTE
     raise OpenUtauError("Usage guide not found", "使い方ガイドが見つかりません")
 
 
