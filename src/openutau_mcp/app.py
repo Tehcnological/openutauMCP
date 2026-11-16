@@ -12,7 +12,9 @@ from .errors import OpenUtauError
 
 def find_exe() -> str | None:
     candidates = [os.environ.get("OPENUTAU_EXE")]
-    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), os.environ.get("LOCALAPPDATA")):
+    # MCP clients often start servers with a short env whitelist that has no ProgramFiles: fall back to the defaults
+    for base in (os.environ.get("ProgramFiles", r"C:\Program Files"),
+                 os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"), os.environ.get("LOCALAPPDATA")):
         if base:
             candidates.append(os.path.join(base, "OpenUtau", "OpenUtau.exe"))
             candidates.append(os.path.join(base, "Programs", "OpenUtau", "OpenUtau.exe"))
@@ -46,6 +48,23 @@ def status() -> dict:
     return info
 
 
+def spawn(args: list[str], cwd: str) -> None:
+    """Start the editor so it outlives this server. Some MCP clients (e.g. the official Python SDK on Windows) run
+    the server in a job object that kills every child process when the client disconnects, which would close the
+    editor with unsaved work; Windows creates a process started through WMI outside that job."""
+    ps = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
+          "-Arguments @{CommandLine=$env:MCP_SPAWN_CMD; CurrentDirectory=$env:MCP_SPAWN_DIR}; exit $r.ReturnValue")
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
+                           env={**os.environ, "MCP_SPAWN_CMD": subprocess.list2cmdline(args), "MCP_SPAWN_DIR": cwd},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=60)
+        if r.returncode == 0:
+            return
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    subprocess.Popen(args, cwd=cwd, close_fds=True, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+
+
 def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
     if project_path:
         project_path = os.path.abspath(project_path)
@@ -62,9 +81,7 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
             "OpenUtau.exe not found; set the OPENUTAU_EXE environment variable",
             "OpenUtau.exe が見つかりません。環境変数 OPENUTAU_EXE を設定してください",
         )
-    args = [exe] + ([project_path] if project_path else [])
-    subprocess.Popen(args, cwd=os.path.dirname(exe), close_fds=True,
-                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    spawn([exe] + ([project_path] if project_path else []), os.path.dirname(exe))
     deadline = time.time() + wait_seconds
     while time.time() < deadline:
         if bridge.reachable():

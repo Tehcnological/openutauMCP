@@ -26,7 +26,7 @@ import sys
 
 from jsonschema import Draft7Validator, Draft202012Validator
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp.client.stdio import get_default_environment, stdio_client
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANNED = {"$ref", "$defs", "definitions", "title", "allOf", "oneOf", "not", "const", "if", "then", "else",
@@ -96,7 +96,8 @@ async def main():
     exe = exe and os.path.abspath(exe)
     pkg = os.path.basename(glob.glob(os.path.join(ROOT, "src", "*_mcp"))[0])
     params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", f"{pkg}.server"],
-                                   env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                                   env={**get_default_environment(), "PYTHONIOENCODING": "utf-8",  # what MCP clients pass by default
+                                        **{k: v for k, v in os.environ.items() if k.startswith("OPENUTAU")}})
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         init = await s.initialize()
         tools = (await s.list_tools()).tools

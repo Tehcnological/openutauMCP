@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp.client.stdio import get_default_environment, stdio_client
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USTXCHECK = os.path.join(ROOT, ".build", "ustxcheck", "ustxcheck.exe")
@@ -309,7 +309,8 @@ async def main():
     tmp = tempfile.mkdtemp(prefix="openutau-mcp-e2e-")
     exe = os.environ.get("MCP_SERVER_EXE")  # e.g. the single-file build in dist/
     params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", "openutau_mcp.server"],
-                                   env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+                                   env={**get_default_environment(), "PYTHONIOENCODING": "utf-8",  # what MCP clients pass by default
+                                        **{k: v for k, v in os.environ.items() if k.startswith("OPENUTAU")}})
     try:
         async with stdio_client(params) as (r, w):
             async with ClientSession(r, w) as session:
