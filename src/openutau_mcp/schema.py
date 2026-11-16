@@ -39,14 +39,16 @@ def simplify(schema: dict) -> dict:
 
 
 def _collapse(branches: list[dict]) -> dict:
-    """One schema for a union: the list form if there is one (a single value is still accepted), else a scalar."""
+    """One schema for a union: the list form if there is one (a single value is still accepted), else an object
+    branch, else the widest scalar (string > number > integer > boolean)."""
     if len(branches) == 1:
         return branches[0]
-    for b in branches:
-        if b.get("type") == "array":
-            return b
+    for t in ("array", "object"):
+        for b in branches:
+            if b.get("type") == t:
+                return b
     types = {b.get("type") for b in branches}
-    return {"type": "string" if "string" in types else "number" if "number" in types else "integer"}
+    return {"type": next((t for t in ("string", "number", "integer") if t in types), "boolean")}
 
 
 class FastMCP(fastmcp.FastMCP):

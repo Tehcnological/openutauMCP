@@ -85,6 +85,8 @@ def check_tools(server: str, tools: list) -> tuple[list[str], list[str]]:
         if not 1 <= len(t.description or "") <= 1024:
             errors.append(f"{t.name}: description must be 1..1024 characters (is {len(t.description or '')})")
         errors += check_schema(t.name, t.inputSchema)
+        if getattr(t, "outputSchema", None):
+            errors += check_schema(f"{t.name} (output)", t.outputSchema)
         size = len(json.dumps(t.inputSchema, ensure_ascii=False, separators=(",", ":")).encode())
         if size > 5000:
             warnings.append(f"{t.name}: input schema is {size} bytes; Codex strips its descriptions (> 5000)")

@@ -62,9 +62,11 @@ are kept and a warning is returned.
 Live tools talk to a small plugin inside OpenUtau. Install it once (and again after an update), with OpenUtau closed:
 
 - **Route A:** run `C:\Tools\openutau-mcp.exe install-plugin`. It copies the plugin into
-  `Documents\OpenUtau\Plugins\OpenUtauMcp\` (or `%OPENUTAU_DATA_DIR%\Plugins\OpenUtauMcp\`).
+  `Plugins\OpenUtauMcp\` inside OpenUtau's data folder, found the way OpenUtau finds it: `Documents\OpenUtau` for an
+  installed OpenUtau (also when Documents is redirected, e.g. to OneDrive), the OpenUtau program folder for the zip
+  (portable) version, or `%OPENUTAU_DATA_DIR%` if you set it.
 - **Routes B and C:** download `OpenUtauMcp.Plugin.dll` from the same release and copy it into
-  `%USERPROFILE%\Documents\OpenUtau\Plugins\OpenUtauMcp\` (create the folder). Or build it (below).
+  `Plugins\OpenUtauMcp\` in that same data folder (create the folder). Or build it (below).
 
 Start OpenUtau (it loads plugins only at startup). The OpenUtau log shows
 `OpenUtau MCP bridge listening on 127.0.0.1:51128`. In the piano roll, **Batch Edit → OpenUtau MCP: bridge status**
@@ -173,8 +175,9 @@ tool_timeout_sec = 300  # WAV export and launching OpenUtau can take longer than
 Route B: `command = "uvx"` and `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`.
 Or in one step: `codex mcp add openutau -- "C:\Tools\openutau-mcp.exe"` (then add `tool_timeout_sec` by hand).
 
-Optional environment variables: `OPENUTAU_EXE` (path to OpenUtau.exe), `OPENUTAU_DATA_DIR` (default
-`Documents\OpenUtau`), `OPENUTAU_MCP_PORT` (default 51128; set the same variable for OpenUtau to move the plugin).
+Optional environment variables: `OPENUTAU_EXE` (path to OpenUtau.exe), `OPENUTAU_DATA_DIR` (default:
+OpenUtau's own data folder, see step 2), `OPENUTAU_MCP_PORT` (default 51128; `launch_openutau` passes it on to the
+OpenUtau it starts; set it for OpenUtau too if you start OpenUtau yourself).
 Add them as `"env": {"OPENUTAU_EXE": "D:\\Apps\\OpenUtau\\OpenUtau.exe"}` in JSON, or
 `env = { OPENUTAU_EXE = 'D:\Apps\OpenUtau\OpenUtau.exe' }` in TOML.
 

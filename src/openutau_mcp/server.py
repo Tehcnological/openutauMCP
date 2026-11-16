@@ -59,7 +59,7 @@ def _tool():
                 raise
             except Exception as e:  # noqa: BLE001 - surface anything else in both languages
                 raise OpenUtauError(f"{type(e).__name__}: {e}", f"予期しないエラー {type(e).__name__}: {e}") from e
-        return mcp.tool()(wrapper)
+        return mcp.tool(structured_output=False)(wrapper)
     return deco
 
 Pitch = int | str
@@ -142,6 +142,10 @@ def openutau_status() -> dict:
     if info["bridge"]:
         info["project"] = bridge.call("project.get")
     return info
+_GUIDE_NOTE = ("\n\n---\nNote for agents without the skill: files this guide mentions next to it (voicebanks.md, "
+               "mix_stems.py, scripts/) live in the skill folder of the repository and are not part of this server. "
+               "Skip the steps that need them if they are not available.\n")
+
 
 def _guide_text() -> str:
     """skill/SKILL.md without its front matter (bundled next to this file in wheels and the single-file build)."""
@@ -150,7 +154,7 @@ def _guide_text() -> str:
         if os.path.isfile(p):
             with open(p, encoding="utf-8") as f:
                 text = f.read()
-            return text.split("---", 2)[2].lstrip() if text.startswith("---") else text
+            return (text.split("---", 2)[2].lstrip() if text.startswith("---") else text) + _GUIDE_NOTE
     raise OpenUtauError("Usage guide not found", "使い方ガイドが見つかりません")
 
 
@@ -850,8 +854,13 @@ def install_plugin() -> int:
         print("OpenUtau を閉じてから再実行してください（起動中は DLL を上書きできません）。")
         return 1
     dest = os.path.join(voicebanks.data_dir(), "Plugins", "OpenUtauMcp")
-    os.makedirs(dest, exist_ok=True)
-    shutil.copy2(src, dest)
+    try:
+        os.makedirs(dest, exist_ok=True)
+        shutil.copy2(src, dest)
+    except OSError as e:
+        print(f"Could not copy the plugin into {dest}: {e}. Set OPENUTAU_DATA_DIR to OpenUtau's data folder.")
+        print(f"{dest} にプラグインをコピーできませんでした: {e}。OPENUTAU_DATA_DIR に OpenUtau のデータフォルダーを指定してください。")
+        return 1
     print(f"Installed the bridge plugin into {dest}. Start OpenUtau to load it.")
     print(f"ブリッジプラグインを {dest} に入れました。OpenUtau を起動すると読み込まれます。")
     return 0
@@ -859,9 +868,13 @@ def install_plugin() -> int:
 
 def main():
     import sys
-    if sys.argv[1:] == ["install-plugin"]:
+    if sys.argv[1:]:
         sys.stdout.reconfigure(errors="replace")  # a legacy console code page cannot print the Japanese line
-        raise SystemExit(install_plugin())
+        if sys.argv[1:] == ["install-plugin"]:
+            raise SystemExit(install_plugin())
+        print("Usage: openutau-mcp              run the MCP server (stdio; started by your MCP client)")
+        print("       openutau-mcp install-plugin   copy the bundled bridge plugin into OpenUtau (close OpenUtau first)")
+        raise SystemExit(0 if sys.argv[1] in ("-h", "--help") else 2)
     mcp.run()
 
 

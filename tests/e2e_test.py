@@ -308,6 +308,7 @@ async def main():
     live = "--live" in sys.argv
     tmp = tempfile.mkdtemp(prefix="openutau-mcp-e2e-")
     exe = os.environ.get("MCP_SERVER_EXE")  # e.g. the single-file build in dist/
+    exe = exe and os.path.abspath(exe)
     params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", "openutau_mcp.server"],
                                    env={**get_default_environment(), "PYTHONIOENCODING": "utf-8",  # what MCP clients pass by default
                                         **{k: v for k, v in os.environ.items() if k.startswith("OPENUTAU")}})

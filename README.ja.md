@@ -62,10 +62,12 @@ uv pip install -e ".[kanji]"
 
 ライブ操作は OpenUtau の中の小さなプラグインと通信します。OpenUtau を閉じた状態で一度だけ（更新後にもう一度）入れます。
 
-- **A の場合：** `C:\Tools\openutau-mcp.exe install-plugin` を実行します。プラグインが
-  `Documents\OpenUtau\Plugins\OpenUtauMcp\`（または `%OPENUTAU_DATA_DIR%\Plugins\OpenUtauMcp\`）にコピーされます。
-- **B・C の場合：** 同じリリースから `OpenUtauMcp.Plugin.dll` をダウンロードし、
-  `%USERPROFILE%\Documents\OpenUtau\Plugins\OpenUtauMcp\`（無ければ作成）にコピーします。またはビルドします（下記）。
+- **A の場合：** `C:\Tools\openutau-mcp.exe install-plugin` を実行します。プラグインが OpenUtau のデータフォルダーの
+  `Plugins\OpenUtauMcp\` にコピーされます。データフォルダーは OpenUtau と同じ方法で決まります：インストール版は
+  `Documents\OpenUtau`（ドキュメントが OneDrive などに移動されていてもその場所）、zip（ポータブル）版は OpenUtau の
+  プログラムフォルダー、`%OPENUTAU_DATA_DIR%` を設定していればそこです。
+- **B・C の場合：** 同じリリースから `OpenUtauMcp.Plugin.dll` をダウンロードし、同じデータフォルダーの
+  `Plugins\OpenUtauMcp\`（無ければ作成）にコピーします。またはビルドします（下記）。
 
 OpenUtau を起動します（プラグインは起動時にしか読み込まれません）。OpenUtau のログに
 `OpenUtau MCP bridge listening on 127.0.0.1:51128` と出れば成功です。ピアノロールの
@@ -175,8 +177,9 @@ tool_timeout_sec = 300  # WAV 書き出しや OpenUtau の起動は既定の 60 
 B の場合：`command = "uvx"` と `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`。
 1行で登録するなら `codex mcp add openutau -- "C:\Tools\openutau-mcp.exe"`（`tool_timeout_sec` は後から手で追加）。
 
-任意の環境変数：`OPENUTAU_EXE`（OpenUtau.exe のパス）、`OPENUTAU_DATA_DIR`（既定 `Documents\OpenUtau`）、
-`OPENUTAU_MCP_PORT`（既定 51128。OpenUtau 側にも同じ変数を設定するとプラグインのポートも変わります）。
+任意の環境変数：`OPENUTAU_EXE`（OpenUtau.exe のパス）、`OPENUTAU_DATA_DIR`（既定は OpenUtau 自身のデータフォルダー、手順 2 参照）、
+`OPENUTAU_MCP_PORT`（既定 51128。`launch_openutau` が起動する OpenUtau にも引き継がれます。OpenUtau を自分で起動する場合は
+OpenUtau 側にも同じ変数を設定してください）。
 JSON では `"env": {"OPENUTAU_EXE": "D:\\Apps\\OpenUtau\\OpenUtau.exe"}`、TOML では
 `env = { OPENUTAU_EXE = 'D:\Apps\OpenUtau\OpenUtau.exe' }` と書きます。
 

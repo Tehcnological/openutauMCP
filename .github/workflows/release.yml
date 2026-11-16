@@ -11,9 +11,16 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: Check the tag matches the version in the code
+        run: |
+          $py = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $init = (Select-String -Path src\*\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$py" -ne $env:GITHUB_REF_NAME -or $py -ne $init) {
+            throw "tag $env:GITHUB_REF_NAME, pyproject.toml $py and __init__.py $init must match"
+          }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4
         with:
           dotnet-version: "10.0.x"
       - name: Get OpenUtau 0.1.576 to compile the plugin against
@@ -29,7 +36,7 @@ jobs:
       - name: Check the exe starts and every tool schema passes
         run: |
           uv venv -p 3.11 .build\check
-          uv pip install -p .build\check "mcp>=1.9,<2"
+          uv pip install -p .build\check "mcp>=1.10,<2"
           .build\check\Scripts\python tests\schema_check.py dist\openutau-mcp.exe
       - name: Draft release
         env:

@@ -10,7 +10,25 @@ from .errors import OpenUtauError
 
 
 def data_dir() -> str:
-    return os.environ.get("OPENUTAU_DATA_DIR") or os.path.join(os.path.expanduser("~"), "Documents", "OpenUtau")
+    """OpenUtau's data folder, as its PathManager picks it on Windows: the program folder for a portable (zip)
+    install, else <Documents>\\OpenUtau, where Documents may be redirected (e.g. to OneDrive)."""
+    if os.environ.get("OPENUTAU_DATA_DIR"):
+        return os.environ["OPENUTAU_DATA_DIR"]
+    from . import app
+    exe = app.find_exe()
+    if exe and not os.path.isfile(os.path.join(os.path.dirname(exe), "installed.txt")):
+        return os.path.dirname(exe)
+    return os.path.join(_documents(), "OpenUtau")
+
+
+def _documents() -> str:
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            return winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(k, "Personal")[0])
+    except (ImportError, OSError):
+        return os.path.join(os.path.expanduser("~"), "Documents")
 
 
 def prefs() -> dict:
