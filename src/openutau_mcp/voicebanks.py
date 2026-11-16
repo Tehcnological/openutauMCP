@@ -15,10 +15,21 @@ def data_dir() -> str:
     if os.environ.get("OPENUTAU_DATA_DIR"):
         return os.environ["OPENUTAU_DATA_DIR"]
     from . import app
-    exe = app.find_exe()
+    exe = None
+    for p in app.processes():  # the OpenUtau that is running decides, else the one launch would start
+        try:
+            exe = p.exe()
+            break
+        except Exception:  # noqa: BLE001 - access denied or already gone
+            pass
+    exe = exe or app.find_exe()
     if exe and not os.path.isfile(os.path.join(os.path.dirname(exe), "installed.txt")):
         return os.path.dirname(exe)
     return os.path.join(_documents(), "OpenUtau")
+
+
+def plugins_dir() -> str:
+    return os.path.join(data_dir(), "Plugins", "OpenUtauMcp")
 
 
 def _documents() -> str:
@@ -26,9 +37,12 @@ def _documents() -> str:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                             r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
-            return winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(k, "Personal")[0])
+            path = winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(k, "Personal")[0])
+        if "%" not in path:  # a variable the client did not pass (e.g. USERPROFILE) stays unexpanded
+            return path
     except (ImportError, OSError):
-        return os.path.join(os.path.expanduser("~"), "Documents")
+        pass
+    return os.path.join(os.path.expanduser("~"), "Documents")
 
 
 def prefs() -> dict:

@@ -4,6 +4,7 @@ import functools
 import os
 from typing import Any
 
+import pydantic_core
 from .schema import FastMCP
 from pydantic import BaseModel, Field
 
@@ -54,7 +55,9 @@ def _tool():
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
-                return fn(*args, **kwargs)
+                r = fn(*args, **kwargs)
+                # one JSON text block: FastMCP would send a list as one block per item (none when empty)
+                return pydantic_core.to_json(r, fallback=str, indent=2).decode() if isinstance(r, list) else r
             except OpenUtauError:
                 raise
             except Exception as e:  # noqa: BLE001 - surface anything else in both languages
@@ -853,13 +856,15 @@ def install_plugin() -> int:
         print("Close OpenUtau first (it keeps the plugin DLL open), then run this again.")
         print("OpenUtau を閉じてから再実行してください（起動中は DLL を上書きできません）。")
         return 1
-    dest = os.path.join(voicebanks.data_dir(), "Plugins", "OpenUtauMcp")
+    dest = voicebanks.plugins_dir()
     try:
         os.makedirs(dest, exist_ok=True)
         shutil.copy2(src, dest)
     except OSError as e:
-        print(f"Could not copy the plugin into {dest}: {e}. Set OPENUTAU_DATA_DIR to OpenUtau's data folder.")
-        print(f"{dest} にプラグインをコピーできませんでした: {e}。OPENUTAU_DATA_DIR に OpenUtau のデータフォルダーを指定してください。")
+        print(f"Could not copy the plugin into {dest}: {e}. If OpenUtau is in a protected folder (e.g. Program Files), "
+              "run this again as administrator, or copy the DLL there by hand.")
+        print(f"{dest} にプラグインをコピーできませんでした: {e}。OpenUtau が保護されたフォルダー（Program Files など）にある場合は、"
+              "管理者として再実行するか、DLL を手動でコピーしてください。")
         return 1
     print(f"Installed the bridge plugin into {dest}. Start OpenUtau to load it.")
     print(f"ブリッジプラグインを {dest} に入れました。OpenUtau を起動すると読み込まれます。")

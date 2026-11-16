@@ -41,7 +41,7 @@ def status() -> dict:
         info["hint"] = ("OpenUtau is not running: call launch_openutau. / "
                         "OpenUtau が起動していません。launch_openutau を実行してください。")
     else:
-        plugins = os.path.join(voicebanks.data_dir(), "Plugins", "OpenUtauMcp")
+        plugins = voicebanks.plugins_dir()
         info["hint"] = (
             f"OpenUtau is running but the bridge is not answering: put OpenUtauMcp.Plugin.dll into {plugins} "
             "(single-file build: close OpenUtau and run `openutau-mcp.exe install-plugin`) and restart OpenUtau "
@@ -70,13 +70,17 @@ def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> None:
     user's full environment; this server's variables whose names start with env_prefix are added by a hidden cmd
     that then starts the editor (WMI's own environment option would replace the whole environment)."""
     cmd = subprocess.list2cmdline(args)
-    extra = {k: v for k, v in os.environ.items() if env_prefix and k.upper().startswith(env_prefix)}
-    if extra:
-        cmd = "cmd /c " + " && ".join(f'set "{k}={v}"' for k, v in extra.items()) + ' && start "" ' + cmd
+    # skip values cmd would expand or misquote (% and "); Windows paths cannot contain "
+    extra = {k: v for k, v in os.environ.items()
+             if env_prefix and k.upper().startswith(env_prefix) and not {'"', "%"} & set(v)}
+    wrap = bool(extra) and "%" not in cmd
+    if wrap:  # every argument in quotes, so cmd reads & | < > ^ in a path as text
+        cmd = ("cmd /c " + " && ".join(f'set "{k}={v}"' for k, v in extra.items())
+               + ' && start "" ' + " ".join(f'"{a}"' for a in args))
     try:
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _SPAWN_PS], capture_output=True,
                            env={**os.environ, "MCP_SPAWN_CMD": cmd, "MCP_SPAWN_DIR": cwd,
-                                "MCP_SPAWN_HIDE": "1" if extra else ""},
+                                "MCP_SPAWN_HIDE": "1" if wrap else ""},
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=60)
         if r.returncode == 0:
             return

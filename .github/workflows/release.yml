@@ -16,8 +16,9 @@ jobs:
         run: |
           $py = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
           $init = (Select-String -Path src\*\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
-          if ("v$py" -ne $env:GITHUB_REF_NAME -or $py -ne $init) {
-            throw "tag $env:GITHUB_REF_NAME, pyproject.toml $py and __init__.py $init must match"
+          $dll = (Select-String -Path plugin\OpenUtauMcp.Plugin.csproj -Pattern '<Version>(.+)</Version>').Matches[0].Groups[1].Value
+          if ("v$py" -ne $env:GITHUB_REF_NAME -or $py -ne $init -or $py -ne $dll) {
+            throw "tag $env:GITHUB_REF_NAME, pyproject.toml $py, __init__.py $init and the plugin csproj $dll must match"
           }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4
