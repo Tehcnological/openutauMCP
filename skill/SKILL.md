@@ -110,7 +110,8 @@ without being asked.
 - Phoneme timing by hand (`edit_notes` / `ustx_edit_notes` → `phoneme_overrides: [{index, offset, preutter_delta,
   overlap_delta}]`): `index` = phoneme within the note (from `list_phonemes`), `offset` in ticks (-30 = consonant
   30 ticks earlier), deltas in ms; 0 clears, `list_notes` shows them. OpenUtau clamps preutter/overlap to what the
-  sample allows. Use it on single notes the user points at, not copied wholesale from a recording.
+  sample and the previous note allow, so a delta can come back as nothing: read `list_notes` / `list_phonemes`.
+  Use it on single notes the user points at, not copied wholesale from a recording.
 
 ## 5b. Songs over a backing track: the song analysis tool / 伴奏に合わせた曲
 
@@ -201,8 +202,9 @@ The scripts are in `scripts\` next to this file (`SCRIPTS` below). They need a P
 - "More emotion" for a DiffSinger voice that sounds flat is mostly: `vol` peaks on stressed words (105), a gentle
   `dyn` swell across each phrase, vibrato on mid-phrase held notes, and small `brec` under soft passages. Apply it
   per track, then re-listen or A/B before adding more.
-- Do not copy a human singer's pitch curve note by note onto a bank that already moves pitch by itself
-  (DiffSinger): it sounded strained, not more human, in a cover session. Prefer song-wide changes (note releases,
+- Do not copy a human singer's pitch curve note by note onto a voice that already moves pitch by itself: on an AI
+  singing engine that does this (VOCALOID6 AI) it sounded strained, not more human, in a cover session. DiffSinger
+  banks move pitch themselves too, so expect the same there. Prefer song-wide changes (note releases,
   verse/chorus contrast, vibrato on held notes, mix balance) and hand-tune only the notes the user points at.
   Plain UTAU banks hold a flat pitch, so a reference curve might help there: untested, say so if you try it.
 - New voicebank installed while OpenUtau is open: `refresh_singers` instead of restarting.
