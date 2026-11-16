@@ -151,7 +151,7 @@ _GUIDE_NOTE = ("\n\n---\nNote for agents without the skill: files this guide men
                "Skip the steps that need them if they are not available.\n")
 
 
-FRONT_MATTER = re.compile(r"\A---[ \t]*\r?\n(?:.*?\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)  # empty or at end of file too
+FRONT_MATTER = re.compile(r"\A---[ \t]*\r?\n(?:.*?\r?\n)??---[ \t]*(?:\r?\n|\Z)", re.S)  # empty or at end of file too
 
 
 def _guide_text() -> str:

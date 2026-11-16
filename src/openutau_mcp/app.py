@@ -74,6 +74,20 @@ exit $r.ReturnValue
 """
 
 
+def cmd_env(env_prefix: str | None) -> tuple[dict, list[str]]:
+    """This server's variables to pass to the editor (names starting with env_prefix), and warnings for those that
+    cannot go through cmd (it would expand % or end the quoted value at ")."""
+    extra, warnings = {}, []
+    for k, v in os.environ.items():
+        if env_prefix and k.upper().startswith(env_prefix):
+            if {'"', "%"} & set(v):
+                warnings.append(f"{k} was not passed to the editor (its value has % or \"). / "
+                                f"{k} はエディターに渡していません（値に % か \" を含むため）。")
+            else:
+                extra[k] = v
+    return extra, warnings
+
+
 def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]:
     """Start the editor so it outlives this server. Some MCP clients (e.g. the official Python SDK on Windows) run
     the server in a job object that kills every child process when the client disconnects, which would close the
@@ -82,14 +96,7 @@ def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]
     that then starts the editor (WMI's own environment option would replace the whole environment).
     A child process would get only the client's trimmed environment, so WMI is always tried first.
     Returns warnings for the caller to pass on."""
-    warnings, extra = [], {}
-    for k, v in os.environ.items():
-        if env_prefix and k.upper().startswith(env_prefix):
-            if {'"', "%"} & set(v):  # cmd would expand % or end the quoted value at "
-                warnings.append(f"{k} was not passed to the editor (its value has % or \"). / "
-                                f"{k} はエディターに渡していません（値に % か \" を含むため）。")
-            else:
-                extra[k] = v
+    extra, warnings = cmd_env(env_prefix)
     cmd = subprocess.list2cmdline(args)
     wrap = bool(extra) and "%" not in cmd
     if extra and not wrap:
@@ -108,7 +115,8 @@ def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]
         started = None  # WMI may still be creating it: wait longer before trying another way
     except OSError:
         started = False
-    for _ in range(10 if started else 30 if started is None else 5):  # WMI may report success for cmd whose `start` then failed, or be slow
+    # WMI may report success for a cmd whose `start` then failed, or be slow: never start a second copy
+    for _ in range(10 if started else 30 if started is None else 5):
         if processes():
             return warnings
         time.sleep(1)
@@ -136,7 +144,7 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
         )
     # with OPENUTAU_* settings to pass, spawn starts OpenUtau through cmd, which would expand %NAME% in a path:
     # such a path is opened through the bridge once it is up instead
-    via_cmd = any(k.upper().startswith("OPENUTAU") for k in os.environ)
+    via_cmd = bool(cmd_env("OPENUTAU")[0])  # the same rule spawn uses
     later = project_path if project_path and via_cmd and "%" in project_path else None
     warnings = spawn([exe] + ([project_path] if project_path and not later else []), os.path.dirname(exe),
                      env_prefix="OPENUTAU")
