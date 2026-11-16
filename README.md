@@ -36,17 +36,16 @@ bridge plugin is inside the exe (step 2).
 - Japanese kanji-to-kana support (`pykakasi`) is built in.
 
 **B. uvx, always the latest code.** Needs [uv](https://docs.astral.sh/uv/). Nothing to clone; uv downloads and caches
-the server the first time the client starts it. The command is `uvx` with these arguments (replace `<owner>` with the
-GitHub account this repository belongs to):
+the server the first time the client starts it. The command is `uvx` with these arguments:
 
 ```text
---from "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP" openutau-mcp
+--from "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP" openutau-mcp
 ```
 
 **C. From a clone (to change the code).** Needs Python 3.11+ and uv:
 
 ```bash
-git clone <this repo> openutau-mcp
+git clone https://github.com/Tehcnological/openutauMCP openutau-mcp
 ```
 
 ```bash
@@ -111,7 +110,7 @@ file. In JSON every `\` in a path is written `\\`.
 }
 ```
 
-Route B: `"command": "uvx", "args": ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`.
+Route B: `"command": "uvx", "args": ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`.
 
 | Client | Config file (merge the `openutau` entry into `mcpServers`) |
 |---|---|
@@ -129,7 +128,7 @@ claude mcp add --scope user openutau -- "C:\Tools\openutau-mcp.exe"
 ```
 
 ```bash
-claude mcp add --scope user openutau -- uvx --from "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP" openutau-mcp
+claude mcp add --scope user openutau -- uvx --from "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP" openutau-mcp
 ```
 
 **VS Code (GitHub Copilot, agent mode)**: Command Palette, **MCP: Open User Configuration** (or `.vscode\mcp.json` in
@@ -161,7 +160,7 @@ mcpServers:
     command: 'C:\Tools\openutau-mcp.exe'
 ```
 
-Route B: `command: uvx` and `args: ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`.
+Route B: `command: uvx` and `args: ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`.
 
 **Codex CLI**: add to `%USERPROFILE%\.codex\config.toml` (in TOML, single quotes keep `\` as is):
 
@@ -171,7 +170,7 @@ command = 'C:\Tools\openutau-mcp.exe'
 tool_timeout_sec = 300  # WAV export and launching OpenUtau can take longer than the 60 s default
 ```
 
-Route B: `command = "uvx"` and `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`.
+Route B: `command = "uvx"` and `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`.
 Or in one step: `codex mcp add openutau -- "C:\Tools\openutau-mcp.exe"` (then add `tool_timeout_sec` by hand).
 
 Optional environment variables: `OPENUTAU_EXE` (path to OpenUtau.exe), `OPENUTAU_DATA_DIR` (default
@@ -209,7 +208,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 It needs uv, a .NET 10 SDK and an OpenUtau install to compile the plugin against (`-OpenUtauDir "D:\Apps\OpenUtau"`
 if it is not in `C:\Program Files\OpenUtau`; `-Dotnet $env:USERPROFILE\.dotnet-sdk10\dotnet.exe` for a user-folder
 SDK). It writes `dist\openutau-mcp.exe` (PyInstaller, about 20 MB, plugin inside), `dist\OpenUtauMcp.Plugin.dll`,
-`SHA256SUMS.txt` and the list of packages inside. Pushing a tag such as `v0.2.0` runs the same script on GitHub
+`SHA256SUMS.txt` and the list of packages inside. Pushing a tag such as `v0.4.0` runs the same script on GitHub
 Actions (against OpenUtau 0.1.576) and attaches the files to a draft release, which you publish by hand.
 
 ## Usage

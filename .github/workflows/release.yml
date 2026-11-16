@@ -1,4 +1,4 @@
-# On a version tag (e.g. v0.2.0): build the single-file exe (plugin inside) and the plugin DLL against OpenUtau
+# On a version tag (e.g. v0.4.0): build the single-file exe (plugin inside) and the plugin DLL against OpenUtau
 # 0.1.576, check the exe answers over stdio, attach both to a DRAFT release. Nothing is public until the draft is
 # published by hand on GitHub.
 name: release

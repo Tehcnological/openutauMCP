@@ -37,17 +37,16 @@ MCP クライアント（Claude、Cursor、VS Code、Codex、Gemini CLI など�
 - 漢字をかなに変換する機能（`pykakasi`）が入っています。
 
 **B. uvx（常に最新のコード）。** [uv](https://docs.astral.sh/uv/) が必要です。クローン不要で、クライアントが初めて
-起動したときに uv がサーバーをダウンロードしてキャッシュします。コマンドは `uvx`、引数は次のとおりです
-（`<owner>` はこのリポジトリがある GitHub アカウント名に置き換えます）。
+起動したときに uv がサーバーをダウンロードしてキャッシュします。コマンドは `uvx`、引数は次のとおりです。
 
 ```text
---from "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP" openutau-mcp
+--from "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP" openutau-mcp
 ```
 
 **C. クローンから（コードを変更する場合）。** Python 3.11 以上と uv が必要です。
 
 ```bash
-git clone <このリポジトリ> openutau-mcp
+git clone https://github.com/Tehcnological/openutauMCP openutau-mcp
 ```
 
 ```bash
@@ -113,7 +112,7 @@ JSON ではパスの `\` を `\\` と書きます。
 }
 ```
 
-B の場合：`"command": "uvx", "args": ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`。
+B の場合：`"command": "uvx", "args": ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`。
 
 | クライアント | 設定ファイル（`mcpServers` に `openutau` の項目を追加） |
 |---|---|
@@ -131,7 +130,7 @@ claude mcp add --scope user openutau -- "C:\Tools\openutau-mcp.exe"
 ```
 
 ```bash
-claude mcp add --scope user openutau -- uvx --from "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP" openutau-mcp
+claude mcp add --scope user openutau -- uvx --from "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP" openutau-mcp
 ```
 
 **VS Code（GitHub Copilot のエージェントモード）**：コマンドパレットで **MCP: Open User Configuration**
@@ -163,7 +162,7 @@ mcpServers:
     command: 'C:\Tools\openutau-mcp.exe'
 ```
 
-B の場合：`command: uvx` と `args: ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`。
+B の場合：`command: uvx` と `args: ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`。
 
 **Codex CLI**：`%USERPROFILE%\.codex\config.toml` に追加します（TOML では単一引用符で囲むと `\` をそのまま書けます）。
 
@@ -173,7 +172,7 @@ command = 'C:\Tools\openutau-mcp.exe'
 tool_timeout_sec = 300  # WAV 書き出しや OpenUtau の起動は既定の 60 秒を超えることがあります
 ```
 
-B の場合：`command = "uvx"` と `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/<owner>/openutauMCP", "openutau-mcp"]`。
+B の場合：`command = "uvx"` と `args = ["--from", "openutau-mcp[kanji] @ git+https://github.com/Tehcnological/openutauMCP", "openutau-mcp"]`。
 1行で登録するなら `codex mcp add openutau -- "C:\Tools\openutau-mcp.exe"`（`tool_timeout_sec` は後から手で追加）。
 
 任意の環境変数：`OPENUTAU_EXE`（OpenUtau.exe のパス）、`OPENUTAU_DATA_DIR`（既定 `Documents\OpenUtau`）、
@@ -210,7 +209,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 uv、.NET 10 SDK、プラグインのビルドに使う OpenUtau のインストールが必要です（`C:\Program Files\OpenUtau` 以外なら
 `-OpenUtauDir "D:\Apps\OpenUtau"`、ユーザーフォルダーの SDK なら `-Dotnet $env:USERPROFILE\.dotnet-sdk10\dotnet.exe`）。
 `dist\openutau-mcp.exe`（PyInstaller、約 20 MB、プラグイン入り）、`dist\OpenUtauMcp.Plugin.dll`、`SHA256SUMS.txt`、
-中に入ったパッケージの一覧を作ります。`v0.2.0` のようなタグを push すると GitHub Actions が同じスクリプトを
+中に入ったパッケージの一覧を作ります。`v0.4.0` のようなタグを push すると GitHub Actions が同じスクリプトを
 （OpenUtau 0.1.576 を使って）実行し、ファイルを下書きのリリースに添付します。公開は手動です。
 
 ## 使い方

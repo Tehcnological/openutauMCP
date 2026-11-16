@@ -7,7 +7,7 @@ from typing import Any
 from .schema import FastMCP
 from pydantic import BaseModel, Field
 
-from . import app, bridge, music, ust, ustx, voicebanks
+from . import __version__, app, bridge, music, ust, ustx, voicebanks
 from . import lyrics as lyric_text
 from .errors import OpenUtauError
 
@@ -45,6 +45,7 @@ OpenUtau（歌声合成）を英語・日本語で操作します。
 """
 
 mcp = FastMCP("openutau", instructions=INSTRUCTIONS, log_level="WARNING")
+mcp._mcp_server.version = __version__  # FastMCP would report the MCP SDK's version
 
 
 def _tool():

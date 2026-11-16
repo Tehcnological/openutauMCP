@@ -6,7 +6,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>OpenUtauMcp.Plugin</AssemblyName>
     <RootNamespace>OpenUtauMcp.Plugin</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.4.0</Version>
     <!-- Folder of the installed OpenUtau. Override with: dotnet build -p:OpenUtauDir="D:\Apps\OpenUtau" -->
     <OpenUtauDir Condition="'$(OpenUtauDir)' == ''">C:\Program Files\OpenUtau</OpenUtauDir>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
