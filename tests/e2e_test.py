@@ -15,8 +15,10 @@ import subprocess
 import sys
 import tempfile
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import get_default_environment, stdio_client
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
+
+from _server import server_params
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USTXCHECK = os.path.join(ROOT, ".build", "ustxcheck", "ustxcheck.exe")
@@ -307,11 +309,7 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
 async def main():
     live = "--live" in sys.argv
     tmp = tempfile.mkdtemp(prefix="openutau-mcp-e2e-")
-    exe = os.environ.get("MCP_SERVER_EXE")  # e.g. the single-file build in dist/
-    exe = exe and os.path.abspath(exe)
-    params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", "openutau_mcp.server"],
-                                   env={**get_default_environment(), "PYTHONIOENCODING": "utf-8",  # what MCP clients pass by default
-                                        **{k: v for k, v in os.environ.items() if k.startswith("OPENUTAU")}})
+    params = server_params()
     try:
         async with stdio_client(params) as (r, w):
             async with ClientSession(r, w) as session:

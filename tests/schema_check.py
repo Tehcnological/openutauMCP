@@ -18,17 +18,16 @@ Rules and the clients that need them (researched 2026-11):
 """
 
 import asyncio
-import glob
 import json
-import os
 import re
 import sys
 
 from jsonschema import Draft7Validator, Draft202012Validator
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import get_default_environment, stdio_client
+from mcp import ClientSession
+from mcp.client.stdio import stdio_client
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from _server import server_params
+
 BANNED = {"$ref", "$defs", "definitions", "title", "allOf", "oneOf", "not", "const", "if", "then", "else",
           "prefixItems", "$dynamicRef", "patternProperties"}
 TYPES = {"object", "array", "string", "integer", "number", "boolean", "null"}
@@ -94,12 +93,7 @@ def check_tools(server: str, tools: list) -> tuple[list[str], list[str]]:
 
 
 async def main():
-    exe = (sys.argv[1:] or [os.environ.get("MCP_SERVER_EXE")])[0]
-    exe = exe and os.path.abspath(exe)
-    pkg = os.path.basename(glob.glob(os.path.join(ROOT, "src", "*_mcp"))[0])
-    params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", f"{pkg}.server"],
-                                   env={**get_default_environment(), "PYTHONIOENCODING": "utf-8",  # what MCP clients pass by default
-                                        **{k: v for k, v in os.environ.items() if k.startswith("OPENUTAU")}})
+    params = server_params(sys.argv[1] if sys.argv[1:] else None)
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         init = await s.initialize()
         tools = (await s.list_tools()).tools

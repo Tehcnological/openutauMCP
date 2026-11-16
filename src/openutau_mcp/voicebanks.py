@@ -3,10 +3,14 @@
 import json
 import os
 import re
+import time
 
 import yaml
 
 from .errors import OpenUtauError
+
+
+_data_dir_cache = (0.0, "")
 
 
 def data_dir() -> str:
@@ -14,6 +18,13 @@ def data_dir() -> str:
     install, else <Documents>\\OpenUtau, where Documents may be redirected (e.g. to OneDrive)."""
     if os.environ.get("OPENUTAU_DATA_DIR"):
         return os.environ["OPENUTAU_DATA_DIR"]
+    global _data_dir_cache
+    if time.monotonic() - _data_dir_cache[0] > 5:  # one tool call asks several times; each lookup scans processes
+        _data_dir_cache = (time.monotonic(), _find_data_dir())
+    return _data_dir_cache[1]
+
+
+def _find_data_dir() -> str:
     from . import app
     exe = None
     for p in app.processes():  # the OpenUtau that is running decides, else the one launch would start

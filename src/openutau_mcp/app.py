@@ -10,12 +10,22 @@ from . import bridge, voicebanks
 from .errors import OpenUtauError
 
 
+def known_dir(env: str, reg_value: str) -> str | None:
+    """A Windows folder from its environment variable, else from the registry: MCP clients often start servers
+    with a short environment that has no ProgramFiles."""
+    if os.environ.get(env):
+        return os.environ[env]
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion") as k:
+            return winreg.QueryValueEx(k, reg_value)[0]
+    except (ImportError, OSError):
+        return None
+
+
 def find_exe() -> str | None:
     candidates = [os.environ.get("OPENUTAU_EXE")]
-    # MCP clients often start servers with a short env whitelist that has no ProgramFiles (but has SystemDrive)
-    drive = os.environ.get("SystemDrive", "C:") + os.sep
-    for base in (os.environ.get("ProgramFiles") or os.path.join(drive, "Program Files"),
-                 os.environ.get("ProgramFiles(x86)") or os.path.join(drive, "Program Files (x86)"),
+    for base in (known_dir("ProgramFiles", "ProgramFilesDir"), known_dir("ProgramFiles(x86)", "ProgramFilesDir (x86)"),
                  os.environ.get("LOCALAPPDATA")):
         if base:
             candidates.append(os.path.join(base, "OpenUtau", "OpenUtau.exe"))
@@ -63,17 +73,27 @@ exit $r.ReturnValue
 """
 
 
-def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> None:
+def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]:
     """Start the editor so it outlives this server. Some MCP clients (e.g. the official Python SDK on Windows) run
     the server in a job object that kills every child process when the client disconnects, which would close the
     editor with unsaved work; Windows creates a process started through WMI outside that job. That process gets the
     user's full environment; this server's variables whose names start with env_prefix are added by a hidden cmd
-    that then starts the editor (WMI's own environment option would replace the whole environment)."""
+    that then starts the editor (WMI's own environment option would replace the whole environment).
+    A child process would get only the client's trimmed environment, so WMI is always tried first.
+    Returns warnings for the caller to pass on."""
+    warnings, extra = [], {}
+    for k, v in os.environ.items():
+        if env_prefix and k.upper().startswith(env_prefix):
+            if {'"', "%"} & set(v):  # cmd would expand % or end the quoted value at "
+                warnings.append(f"{k} was not passed to the editor (its value has % or \"). / "
+                                f"{k} はエディターに渡していません（値に % か \" を含むため）。")
+            else:
+                extra[k] = v
     cmd = subprocess.list2cmdline(args)
-    # skip values cmd would expand or misquote (% and "); Windows paths cannot contain "
-    extra = {k: v for k, v in os.environ.items()
-             if env_prefix and k.upper().startswith(env_prefix) and not {'"', "%"} & set(v)}
     wrap = bool(extra) and "%" not in cmd
+    if extra and not wrap:
+        warnings.append(f"{', '.join(extra)} not passed to the editor (a path has %). / "
+                        f"{', '.join(extra)} はエディターに渡していません（パスに % を含むため）。")
     if wrap:  # every argument in quotes, so cmd reads & | < > ^ in a path as text
         cmd = ("cmd /c " + " && ".join(f'set "{k}={v}"' for k, v in extra.items())
                + ' && start "" ' + " ".join(f'"{a}"' for a in args))
@@ -81,16 +101,18 @@ def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> None:
         r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _SPAWN_PS], capture_output=True,
                            env={**os.environ, "MCP_SPAWN_CMD": cmd, "MCP_SPAWN_DIR": cwd,
                                 "MCP_SPAWN_HIDE": "1" if wrap else ""},
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=60)
-        if r.returncode == 0:
-            return
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=20)
+        started = r.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
-        pass
-    for _ in range(5):  # a slow WMI call may still have started it: never start a second copy
+        started = False
+    for _ in range(10 if started else 5):  # WMI may report success for cmd whose `start` then failed, or be slow
         if processes():
-            return
+            return warnings
         time.sleep(1)
     subprocess.Popen(args, cwd=cwd, close_fds=True, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    return warnings + ["Started as a child of this server: if the MCP client closes it, the editor may close too. "
+                       "Save often. / このサーバーの子プロセスとして起動しました。MCP クライアントが終了すると"
+                       "エディターも閉じることがあります。こまめに保存してください。"]
 
 
 def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
@@ -109,13 +131,21 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
             "OpenUtau.exe not found; set the OPENUTAU_EXE environment variable",
             "OpenUtau.exe が見つかりません。環境変数 OPENUTAU_EXE を設定してください",
         )
-    spawn([exe] + ([project_path] if project_path else []), os.path.dirname(exe), env_prefix="OPENUTAU")
+    # a path with % cannot go through cmd (it would expand %NAME%): open it through the bridge once it is up
+    later = project_path if project_path and "%" in project_path else None
+    warnings = spawn([exe] + ([project_path] if project_path and not later else []), os.path.dirname(exe),
+                     env_prefix="OPENUTAU")
     deadline = time.time() + wait_seconds
     while time.time() < deadline:
         if bridge.reachable():
             break
         time.sleep(1)
-    return {"launched": True, **status()}
+    out = {"launched": True}
+    if warnings:
+        out["warnings"] = warnings
+    if later and bridge.reachable():
+        out.update(opened=later, summary=bridge.call("project.open", path=later))
+    return {**out, **status()}
 
 
 def close(force: bool = False) -> dict:
