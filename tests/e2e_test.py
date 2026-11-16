@@ -57,6 +57,7 @@ class Client:
 async def file_tests(c: Client, tmp: str) -> dict:
     print("[utilities]")
     ok(await c("note_to_midi", note="C4") == 60, "C4 = 60")
+    ok((await c("usage_guide")).startswith("# OpenUtau vocals"), "usage_guide returns the skill text without front matter")
     ok(await c("note_to_midi", note="Cb4") == 59, "Cb4 = 59")
     ok(await c("note_to_midi", note="C-1") == 0, "C-1 = 0")
     ok(await c("note_to_midi", note="Bb3") == 58 and await c("note_to_midi", note="A#3") == 58, "A#3 = Bb3 = 58")
@@ -306,7 +307,8 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
 async def main():
     live = "--live" in sys.argv
     tmp = tempfile.mkdtemp(prefix="openutau-mcp-e2e-")
-    params = StdioServerParameters(command=sys.executable, args=["-m", "openutau_mcp.server"],
+    exe = os.environ.get("MCP_SERVER_EXE")  # e.g. the single-file build in dist/
+    params = StdioServerParameters(command=exe or sys.executable, args=[] if exe else ["-m", "openutau_mcp.server"],
                                    env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     try:
         async with stdio_client(params) as (r, w):
