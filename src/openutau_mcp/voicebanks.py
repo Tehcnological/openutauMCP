@@ -3,14 +3,62 @@
 import json
 import os
 import re
+import time
 
 import yaml
 
 from .errors import OpenUtauError
 
 
+_data_dir_cache = (0.0, "")
+
+
 def data_dir() -> str:
-    return os.environ.get("OPENUTAU_DATA_DIR") or os.path.join(os.path.expanduser("~"), "Documents", "OpenUtau")
+    """OpenUtau's data folder, as its PathManager picks it on Windows: the program folder for a portable (zip)
+    install, else <Documents>\\OpenUtau, where Documents may be redirected (e.g. to OneDrive)."""
+    if os.environ.get("OPENUTAU_DATA_DIR"):
+        return os.environ["OPENUTAU_DATA_DIR"]
+    global _data_dir_cache
+    if time.monotonic() - _data_dir_cache[0] > 5:  # one tool call asks several times; each lookup scans processes
+        _data_dir_cache = (time.monotonic(), _find_data_dir())
+    return _data_dir_cache[1]
+
+
+def _find_data_dir() -> str:
+    from . import app
+    exe = None
+    for p in app.processes():  # the OpenUtau that is running decides, else the one launch would start
+        try:
+            exe = p.exe()
+            break
+        except Exception:  # noqa: BLE001 - access denied or already gone
+            pass
+    exe = exe or app.find_exe()
+    if exe and not os.path.isfile(os.path.join(os.path.dirname(exe), "installed.txt")):
+        return os.path.dirname(exe)
+    return os.path.join(_documents(), "OpenUtau")
+
+
+def plugins_dir() -> str:
+    return os.path.join(data_dir(), "Plugins", "OpenUtauMcp")
+
+
+def _documents() -> str:
+    try:
+        import winreg
+    except ImportError:
+        return os.path.join(os.path.expanduser("~"), "Documents")
+    # "Shell Folders" holds the path already expanded, so it works when the client did not pass USERPROFILE;
+    # it can lack the value, so "User Shell Folders" is tried next
+    for key in ("Shell Folders", "User Shell Folders"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\" + key) as k:
+                path = winreg.ExpandEnvironmentStrings(winreg.QueryValueEx(k, "Personal")[0])
+        except OSError:
+            continue
+        if "%" not in path:
+            return path
+    return os.path.join(os.path.expanduser("~"), "Documents")
 
 
 def prefs() -> dict:

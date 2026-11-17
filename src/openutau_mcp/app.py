@@ -6,13 +6,28 @@ import time
 
 import psutil
 
-from . import bridge
+from . import bridge, voicebanks
 from .errors import OpenUtauError
+
+
+def known_dir(env: str, reg_value: str, default: str) -> str:
+    """A Windows folder from its environment variable, else the registry, else <SystemDrive>\\default: MCP clients
+    often start servers with a short environment that has no ProgramFiles."""
+    if os.environ.get(env):
+        return os.environ[env]
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion") as k:
+            return winreg.QueryValueEx(k, reg_value)[0]
+    except (ImportError, OSError):
+        return os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, default)
 
 
 def find_exe() -> str | None:
     candidates = [os.environ.get("OPENUTAU_EXE")]
-    for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), os.environ.get("LOCALAPPDATA")):
+    for base in (known_dir("ProgramFiles", "ProgramFilesDir", "Program Files"),
+                 known_dir("ProgramFiles(x86)", "ProgramFilesDir (x86)", "Program Files (x86)"),
+                 os.environ.get("LOCALAPPDATA")):
         if base:
             candidates.append(os.path.join(base, "OpenUtau", "OpenUtau.exe"))
             candidates.append(os.path.join(base, "Programs", "OpenUtau", "OpenUtau.exe"))
@@ -37,13 +52,78 @@ def status() -> dict:
         info["hint"] = ("OpenUtau is not running: call launch_openutau. / "
                         "OpenUtau が起動していません。launch_openutau を実行してください。")
     else:
+        plugins = voicebanks.plugins_dir()
         info["hint"] = (
-            "OpenUtau is running but the bridge is not answering: copy OpenUtauMcp.Plugin.dll into "
-            "Documents\\OpenUtau\\Plugins\\OpenUtauMcp\\ and restart OpenUtau (plugins load only at startup). / "
-            "OpenUtau は起動していますがブリッジが応答しません。OpenUtauMcp.Plugin.dll を "
-            "Documents\\OpenUtau\\Plugins\\OpenUtauMcp\\ に置き、OpenUtau を再起動してください。"
+            f"OpenUtau is running but the bridge is not answering: put OpenUtauMcp.Plugin.dll into {plugins} "
+            "(single-file build: close OpenUtau and run `openutau-mcp.exe install-plugin`) and restart OpenUtau "
+            "(plugins load only at startup). / "
+            f"OpenUtau は起動していますがブリッジが応答しません。OpenUtauMcp.Plugin.dll を {plugins} に置き"
+            "（1ファイル版は OpenUtau を閉じて `openutau-mcp.exe install-plugin`）、OpenUtau を再起動してください。"
         )
     return info
+
+
+_SPAWN_PS = """
+$a = @{CommandLine = $env:MCP_SPAWN_CMD; CurrentDirectory = $env:MCP_SPAWN_DIR}
+if ($env:MCP_SPAWN_HIDE) {
+  $a.ProcessStartupInformation = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow = [uint16]0}
+}
+try { $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments $a -ErrorAction Stop } catch { exit 1 }
+if ($null -eq $r) { exit 1 }
+exit $r.ReturnValue
+"""
+
+
+def cmd_env(env_prefix: str | None) -> tuple[dict, list[str]]:
+    """This server's variables to pass to the editor (names starting with env_prefix), and warnings for those that
+    cannot go through cmd (it would expand % or end the quoted value at ")."""
+    extra, warnings = {}, []
+    for k, v in os.environ.items():
+        if env_prefix and k.upper().startswith(env_prefix):
+            if {'"', "%"} & set(v):
+                warnings.append(f"{k} was not passed to the editor (its value has % or \"). / "
+                                f"{k} はエディターに渡していません（値に % か \" を含むため）。")
+            else:
+                extra[k] = v
+    return extra, warnings
+
+
+def spawn(args: list[str], cwd: str, env_prefix: str | None = None) -> list[str]:
+    """Start the editor so it outlives this server. Some MCP clients (e.g. the official Python SDK on Windows) run
+    the server in a job object that kills every child process when the client disconnects, which would close the
+    editor with unsaved work; Windows creates a process started through WMI outside that job. That process gets the
+    user's full environment; this server's variables whose names start with env_prefix are added by a hidden cmd
+    that then starts the editor (WMI's own environment option would replace the whole environment).
+    A child process would get only the client's trimmed environment, so WMI is always tried first.
+    Returns warnings for the caller to pass on."""
+    extra, warnings = cmd_env(env_prefix)
+    cmd = subprocess.list2cmdline(args)
+    wrap = bool(extra) and "%" not in cmd
+    if extra and not wrap:
+        warnings.append(f"{', '.join(extra)} not passed to the editor (a path has %). / "
+                        f"{', '.join(extra)} はエディターに渡していません（パスに % を含むため）。")
+    if wrap:  # every argument in quotes, so cmd reads & | < > ^ in a path as text
+        cmd = ("cmd /c " + " && ".join(f'set "{k}={v}"' for k, v in extra.items())
+               + ' && start "" ' + " ".join(f'"{a}"' for a in args))
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _SPAWN_PS], capture_output=True,
+                           env={**os.environ, "MCP_SPAWN_CMD": cmd, "MCP_SPAWN_DIR": cwd,
+                                "MCP_SPAWN_HIDE": "1" if wrap else ""},
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=20)
+        started = r.returncode == 0
+    except subprocess.TimeoutExpired:
+        started = None  # WMI may still be creating it: wait longer before trying another way
+    except OSError:
+        started = False
+    # WMI may report success for a cmd whose `start` then failed, or be slow: never start a second copy
+    for _ in range(10 if started else 30 if started is None else 5):
+        if processes():
+            return warnings
+        time.sleep(1)
+    subprocess.Popen(args, cwd=cwd, close_fds=True, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    return warnings + ["Started as a child of this server: if the MCP client closes it, the editor may close too. "
+                       "Save often. / このサーバーの子プロセスとして起動しました。MCP クライアントが終了すると"
+                       "エディターも閉じることがあります。こまめに保存してください。"]
 
 
 def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
@@ -62,15 +142,27 @@ def launch(project_path: str | None = None, wait_seconds: float = 60) -> dict:
             "OpenUtau.exe not found; set the OPENUTAU_EXE environment variable",
             "OpenUtau.exe が見つかりません。環境変数 OPENUTAU_EXE を設定してください",
         )
-    args = [exe] + ([project_path] if project_path else [])
-    subprocess.Popen(args, cwd=os.path.dirname(exe), close_fds=True,
-                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    # with OPENUTAU_* settings to pass, spawn starts OpenUtau through cmd, which would expand %NAME% in a path:
+    # such a path is opened through the bridge once it is up instead
+    via_cmd = bool(cmd_env("OPENUTAU")[0])  # the same rule spawn uses
+    later = project_path if project_path and via_cmd and "%" in project_path else None
+    warnings = spawn([exe] + ([project_path] if project_path and not later else []), os.path.dirname(exe),
+                     env_prefix="OPENUTAU")
     deadline = time.time() + wait_seconds
     while time.time() < deadline:
         if bridge.reachable():
             break
         time.sleep(1)
-    return {"launched": True, **status()}
+    out = {"launched": True}
+    if warnings:
+        out["warnings"] = warnings
+    if later and bridge.reachable():
+        out.update(opened=later, summary=bridge.call("project.open", path=later))
+    elif later:
+        out.setdefault("warnings", []).append(
+            f"{later} was not opened: the bridge did not answer. Open it with open_project once it does. / "
+            f"ブリッジが応答しないため {later} を開いていません。応答したら open_project で開いてください。")
+    return {**out, **status()}
 
 
 def close(force: bool = False) -> dict:

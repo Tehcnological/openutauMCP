@@ -2,12 +2,14 @@
 
 import functools
 import os
+import re
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+import pydantic_core
+from .schema import FastMCP
 from pydantic import BaseModel, Field
 
-from . import app, bridge, music, ust, ustx, voicebanks
+from . import __version__, app, bridge, music, ust, ustx, voicebanks
 from . import lyrics as lyric_text
 from .errors import OpenUtauError
 
@@ -27,6 +29,7 @@ Control OpenUtau (singing synthesis) in English or Japanese.
    English lyrics on a Japanese bank -> ENtoJAPhonemizer ("EN to JA"). Check list_phonemes: has_oto=false means the
    voicebank has no sample for that phoneme.
 7. Each live edit is one undo step (undo / redo). Save with save_project.
+8. Before a song task, call usage_guide once for the full workflow and quality rules (skip it if the openutau skill is loaded).
 
 OpenUtau（歌声合成）を英語・日本語で操作します。
 1. まず openutau_status を呼んでください。ライブ操作には OpenUtauMcp プラグイン（ブリッジ）入りの OpenUtau が必要です。
@@ -40,9 +43,11 @@ OpenUtau（歌声合成）を英語・日本語で操作します。
    英語 VCCV → EnglishVCCVPhonemizer、英語 X-SAMPA→ EnXSampaPhonemizer、
    日本語音源で英語歌詞 → ENtoJAPhonemizer。list_phonemes の has_oto=false は音源に該当サンプルがないことを示します。
 7. ライブ編集は1回の呼び出しが1回の取り消し単位です（undo / redo）。保存は save_project。
+8. 曲作りの前に usage_guide を一度呼び、手順と品質ルールの全文を読んでください（openutau スキルを読み込み済みなら不要）。
 """
 
 mcp = FastMCP("openutau", instructions=INSTRUCTIONS, log_level="WARNING")
+mcp._mcp_server.version = __version__  # FastMCP would report the MCP SDK's version
 
 
 def _tool():
@@ -51,12 +56,14 @@ def _tool():
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
-                return fn(*args, **kwargs)
+                r = fn(*args, **kwargs)
+                # one JSON text block: FastMCP would send a list as one block per item (none when empty)
+                return pydantic_core.to_json(r, fallback=str, indent=2).decode() if isinstance(r, list) else r
             except OpenUtauError:
                 raise
             except Exception as e:  # noqa: BLE001 - surface anything else in both languages
                 raise OpenUtauError(f"{type(e).__name__}: {e}", f"予期しないエラー {type(e).__name__}: {e}") from e
-        return mcp.tool()(wrapper)
+        return mcp.tool(structured_output=False)(wrapper)
     return deco
 
 Pitch = int | str
@@ -139,6 +146,32 @@ def openutau_status() -> dict:
     if info["bridge"]:
         info["project"] = bridge.call("project.get")
     return info
+_GUIDE_NOTE = ("\n\n---\nNote for agents without the skill: files this guide mentions next to it (voicebanks.md, "
+               "mix_stems.py, scripts/) live in the skill folder of the repository and are not part of this server. "
+               "Skip the steps that need them if they are not available.\n")
+
+
+FRONT_MATTER = re.compile(r"\A---[ \t]*\r?\n(?:.*?\r?\n)??---[ \t]*(?:\r?\n|\Z)", re.S)  # empty or at end of file too
+
+
+def _guide_text() -> str:
+    """skill/SKILL.md without its front matter (bundled next to this file in wheels and the single-file build)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for p in (os.path.join(here, "SKILL.md"), os.path.join(here, "..", "..", "skill", "SKILL.md")):
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8") as f:
+                text = f.read()
+            return re.sub(FRONT_MATTER, "", text, count=1).lstrip() + _GUIDE_NOTE
+    raise OpenUtauError("Usage guide not found", "使い方ガイドが見つかりません")
+
+
+@_tool()
+def usage_guide() -> str:
+    """Full workflow and quality rules for making good vocals with this server (same text as the Claude skill).
+    Read it once before a song task. / この MCP で良い歌声を作るための手順と品質ルールの全文（Claude 用スキルと同じ内容）。
+    曲作りの前に一度読んでください。"""
+    return _guide_text()
+
 
 
 @_tool()
@@ -815,7 +848,42 @@ def split_lyrics(text: str, language: str = "auto") -> dict:
     return {"language": lang, "lyrics": tokens, "count": len(tokens), "warnings": warnings}
 
 
+def install_plugin() -> int:
+    """Copy the bundled OpenUtauMcp.Plugin.dll (single-file build) into OpenUtau's Plugins folder."""
+    import shutil
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "OpenUtauMcp.Plugin.dll")
+    if not os.path.isfile(src):
+        print("This build has no bundled plugin DLL: build it from plugin/ (see README).")
+        print("このビルドにはプラグイン DLL が入っていません。plugin/ からビルドしてください（README 参照）。")
+        return 1
+    if app.processes():
+        print("Close OpenUtau first (it keeps the plugin DLL open), then run this again.")
+        print("OpenUtau を閉じてから再実行してください（起動中は DLL を上書きできません）。")
+        return 1
+    dest = voicebanks.plugins_dir()
+    try:
+        os.makedirs(dest, exist_ok=True)
+        shutil.copy2(src, dest)
+    except OSError as e:
+        print(f"Could not copy the plugin into {dest}: {e}. If OpenUtau is in a protected folder (e.g. Program Files), "
+              "run this again as administrator, or copy the DLL there by hand.")
+        print(f"{dest} にプラグインをコピーできませんでした: {e}。OpenUtau が保護されたフォルダー（Program Files など）にある場合は、"
+              "管理者として再実行するか、DLL を手動でコピーしてください。")
+        return 1
+    print(f"Installed the bridge plugin into {dest}. Start OpenUtau to load it.")
+    print(f"ブリッジプラグインを {dest} に入れました。OpenUtau を起動すると読み込まれます。")
+    return 0
+
+
 def main():
+    import sys
+    if sys.argv[1:]:
+        sys.stdout.reconfigure(errors="replace")  # a legacy console code page cannot print the Japanese line
+        if sys.argv[1:] == ["install-plugin"]:
+            raise SystemExit(install_plugin())
+        print("Usage: openutau-mcp              run the MCP server (stdio; started by your MCP client)")
+        print("       openutau-mcp install-plugin   copy the bundled bridge plugin into OpenUtau (close OpenUtau first)")
+        raise SystemExit(0 if sys.argv[1] in ("-h", "--help") else 2)
     mcp.run()
 
 
