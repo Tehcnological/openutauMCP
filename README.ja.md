@@ -282,3 +282,5 @@ AI アシスタントにこう頼みます。
 ## ライセンス
 
 MIT。[LICENSE](LICENSE) を参照。OpenUtau プロジェクトとは無関係です。
+
+リリースの単体 `.exe` には GPL-3.0-or-later の pykakasi が含まれるため、`.exe` 全体は GPL-3.0-or-later で配布されます。各リリースに `EXE-LICENSE.md` と `GPL-3.0.txt` を添付しています。このリポジトリのソースコードは MIT のままです。

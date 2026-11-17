@@ -29,6 +29,11 @@ if ($LASTEXITCODE) { throw "uv pip install failed" }
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
 Copy-Item "$plugin\OpenUtauMcp.Plugin.dll" "$root\dist\" -Force
 
+# The exe contains pykakasi (GPL-3.0-or-later), so it ships with that license text and a note that says so.
+$gpl = Get-ChildItem "$venv\Lib\site-packages\pykakasi-*.dist-info" -Recurse -Filter COPYING | Select-Object -First 1
+if (-not $gpl) { throw "pykakasi's COPYING file was not found in the build venv" }
+Copy-Item $gpl.FullName "$root\dist\GPL-3.0.txt" -Force
+Copy-Item "$root\packaging\EXE-LICENSE.md" "$root\dist\" -Force
 # Record exactly what went into the build, next to it.
 $ou = (Get-Item "$OpenUtauDir\OpenUtau.exe").VersionInfo.ProductVersion -replace '\+.*'
 "Plugin compiled against OpenUtau $ou" | Out-File -Encoding utf8 "$root\dist\openutau-mcp-packages.txt"
