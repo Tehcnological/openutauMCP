@@ -132,6 +132,11 @@ async def file_tests(c: Client, tmp: str) -> dict:
     await c("ust_export", ustx_path=path, ust_path=ust_path, part=0)
     raw = open(ust_path, "rb").read().decode("shift_jis")
     ok("Lyric=さ" in raw and "Lyric=R" in raw and "Tempo=100" in raw, "UST export is Shift_JIS with rests")
+    other = os.path.join(tmp, "song.bat")
+    await c.error("ust_export", ustx_path=path, ust_path=other, part=0)
+    ok(not os.path.exists(other), "UST export only writes .ust files")
+    ok("overwrite" in await c.error("ust_export", ustx_path=path, ust_path=ust_path, part=0), "UST export refuses to overwrite")
+    await c("ust_export", ustx_path=path, ust_path=ust_path, part=0, overwrite=True)
     back = os.path.join(tmp, "back.ustx")
     await c("ust_import", ust_path=ust_path, ustx_path=back, singer=ja["id"])
     a = (await c("ustx_list_notes", path=path, part=0))["notes"]

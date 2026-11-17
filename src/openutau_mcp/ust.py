@@ -133,6 +133,9 @@ def _tuning_lines(note: dict) -> list[str]:
 
 def write(path: str, notes: list[dict], tempo: float, project_name: str = "", encoding: str = "shift_jis") -> int:
     """Write notes (part-relative, sorted) as a .ust. Gaps become R rests. Returns number of note blocks."""
+    if not path.lower().endswith(".ust"):  # lyrics are caller text: never write them under another file type
+        raise OpenUtauError("Path must end with .ust", "パスは .ust で終わる必要があります")
+    one_line = lambda s: " ".join(str(s).splitlines())  # a line break in a name or lyric would start a new UST line
     blocks, pos = [], 0
     for n in sorted(notes, key=lambda n: n["position"]):
         if n["position"] < pos:
@@ -144,10 +147,10 @@ def write(path: str, notes: list[dict], tempo: float, project_name: str = "", en
     lines = ["[#VERSION]", "UST Version1.2"]
     if encoding.lower().replace("-", "_") not in ("shift_jis", "sjis", "cp932"):
         lines.append(f"Charset={encoding}")
-    lines += ["[#SETTING]", f"Tempo={tempo:g}", "Tracks=1", f"ProjectName={project_name}", "VoiceDir=", "OutFile=",
+    lines += ["[#SETTING]", f"Tempo={tempo:g}", "Tracks=1", f"ProjectName={one_line(project_name)}", "VoiceDir=", "OutFile=",
               "CacheDir=", "Tool1=wavtool.exe", "Tool2=resampler.exe", "Mode2=True"]
     for i, (length, lyric, tone, note) in enumerate(blocks):
-        lines += [f"[#{i:04d}]", f"Length={length}", f"Lyric={lyric}", f"NoteNum={tone}", "PreUtterance=",
+        lines += [f"[#{i:04d}]", f"Length={length}", f"Lyric={one_line(lyric)}", f"NoteNum={tone}", "PreUtterance=",
                   "Intensity=100", "Modulation=0"]
         if note:
             lines += _tuning_lines(note)

@@ -775,15 +775,18 @@ def ust_import(ust_path: str, ustx_path: str, singer: str | None = None, phonemi
 
 
 @_tool()
-def ust_export(ustx_path: str, ust_path: str, part: int = 0, encoding: str = "shift_jis") -> dict:
+def ust_export(ustx_path: str, ust_path: str, part: int = 0, encoding: str = "shift_jis",
+               overwrite: bool = False) -> dict:
     """Export one voice part of a .ustx as a classic .ust (gaps become R rests; Shift_JIS by default), with each
     note's pitch points (PBS/PBW/PBY/PBM) and vibrato (VBR).
     / .ustx のボイスパートを UTAU の .ust に書き出します（隙間は休符 R、既定は Shift_JIS。ピッチ点とビブラートも書き出し）。"""
+    ust_path = os.path.abspath(ust_path)
+    if os.path.exists(ust_path) and not overwrite:
+        raise OpenUtauError(f"{ust_path} exists; pass overwrite=true", f"{ust_path} は既に存在します。overwrite=true を指定してください")
     project = ustx.load(os.path.abspath(ustx_path))
     vp = ustx.voice_part(project, part)
-    blocks = ust.write(os.path.abspath(ust_path), vp["notes"], project["tempos"][0]["bpm"],
-                       project.get("name", ""), encoding)
-    return {"path": os.path.abspath(ust_path), "blocks": blocks}
+    blocks = ust.write(ust_path, vp["notes"], project["tempos"][0]["bpm"], project.get("name", ""), encoding)
+    return {"path": ust_path, "blocks": blocks}
 
 
 # ======================= voicebanks =======================
