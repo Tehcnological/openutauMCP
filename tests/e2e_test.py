@@ -306,8 +306,33 @@ async def live_tests(c: Client, tmp: str, ctx: dict):
     ok(s["tempos"][0]["bpm"] == 150 and s["voice_parts"][1]["note_count"] == 8, "file tools read OpenUtau's saved file", s)
 
 
+def unit_tests():
+    print("[guide and launch helpers]")
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+    from openutau_mcp import app
+    from openutau_mcp.server import FRONT_MATTER
+    for src, want in {"---\nname: x\n---\n# T\n\n---\n\n## N\n": "# T\n\n---\n\n## N\n",
+                      "---\n---\n# T\nintro\n\n---\n\n## N\n": "# T\nintro\n\n---\n\n## N\n",
+                      "---\nname: x\n---": "", "# T\n---\n": "# T\n---\n"}.items():
+        ok(FRONT_MATTER.sub("", src, count=1) == want, "front matter stripped, later --- rules kept", src)
+    saved = {k: v for k, v in os.environ.items() if k.upper().startswith("OPENUTAU")}
+    try:
+        for k in saved:
+            del os.environ[k]
+        ok(app.cmd_env("OPENUTAU") == ({}, []), "no OPENUTAU_* settings: no cmd wrapper")
+        os.environ.update(OPENUTAU_MCP_PORT="52000", OPENUTAU_DATA_DIR="C:\\100%\\x")
+        extra, warnings = app.cmd_env("OPENUTAU")
+        ok(extra == {"OPENUTAU_MCP_PORT": "52000"} and len(warnings) == 1, "a value with % is left out with a warning",
+           (extra, warnings))
+    finally:
+        for k in [k for k in os.environ if k.upper().startswith("OPENUTAU")]:
+            del os.environ[k]
+        os.environ.update(saved)
+
+
 async def main():
     live = "--live" in sys.argv
+    unit_tests()
     tmp = tempfile.mkdtemp(prefix="openutau-mcp-e2e-")
     params = server_params()
     try:
