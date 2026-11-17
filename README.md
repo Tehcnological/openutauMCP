@@ -286,3 +286,5 @@ that OpenUtau's own loader accepts the written `.ustx` files.
 ## License
 
 MIT, see [LICENSE](LICENSE). Not affiliated with the OpenUtau project.
+
+The single-file `.exe` on the Releases page also contains pykakasi, which is GPL-3.0-or-later, so the `.exe` as a whole is distributed under GPL-3.0-or-later. Each release carries `EXE-LICENSE.md` and `GPL-3.0.txt`. The source in this repository stays MIT.
