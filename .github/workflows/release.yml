@@ -8,8 +8,29 @@ on:
 permissions:
   contents: write
 jobs:
+  # Picks the self-hosted runner only when the repo variable SELF_HOSTED is 'on', Tehcnological started the run
+  # (never a fork PR or anyone else), and the machine is online and idle. Otherwise the GitHub-hosted runner, as before,
+  # so a job never waits on a machine that is off. RUNNER_STATUS_TOKEN is a fine-grained PAT with only
+  # Administration: read on this repo. The runner re-checks the same rules in its own job-started hook.
+  pick-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    outputs:
+      windows: ${{ steps.pick.outputs.windows }}
+    steps:
+      - id: pick
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          TRUSTED: ${{ vars.SELF_HOSTED == 'on' && github.repository_owner == 'Tehcnological' && github.actor == 'Tehcnological' && github.triggering_actor == 'Tehcnological' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+        run: |
+          idle() { [ "$TRUSTED" = true ] && [ -n "$GH_TOKEN" ] && [ "$(timeout 30 gh api "repos/$GITHUB_REPOSITORY/actions/runners" --jq "[.runners[] | select(.status == \"online\" and (.busy | not) and any(.labels[]; .name == \"$1\"))] | length" 2>/dev/null || echo 0)" -gt 0 ] 2>/dev/null; }
+          if idle cmd1; then echo 'windows=["self-hosted","cmd1","windows","x64"]'; else echo 'windows="windows-latest"'; fi >> "$GITHUB_OUTPUT"
+
   build:
-    runs-on: windows-latest
+    needs: pick-runner
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.windows) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Check the tag matches the version in the code
